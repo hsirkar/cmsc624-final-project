@@ -64,7 +64,6 @@ class LockManager
     // held, SHARED or EXCLUSIVE if it is, depending on the current state.
     virtual LockMode Status(const Key& key, vector<Txn*>* owners) = 0;
 
-   protected:
     // The LockManager's lock table tracks all lock requests. For a given key, if
     // 'lock_table_' contains a nonempty deque, then the item with that key is
     // locked and either:
