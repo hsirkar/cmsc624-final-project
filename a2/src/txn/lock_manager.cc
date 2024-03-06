@@ -5,7 +5,7 @@ LockManagerA::LockManagerA(deque<Txn*>* ready_txns) { ready_txns_ = ready_txns; 
 
 bool LockManagerA::WriteLock(Txn* txn, const Key& key)
 {
-    // Attempts to grant a read lock to the specified transaction, enqueueing
+    // Attempts to grant a write lock to the specified transaction, enqueueing
     // request in lock table. Returns true if lock is immediately granted, else
     // returns false.
     //
@@ -131,30 +131,143 @@ LockMode LockManagerA::Status(const Key& key, vector<Txn*>* owners)
 
 LockManagerB::LockManagerB(deque<Txn*>* ready_txns) { ready_txns_ = ready_txns; }
 
+// Grant a write lock for the key to the txn
 bool LockManagerB::WriteLock(Txn* txn, const Key& key)
 {
-    //
-    // Implement this method!
-    return true;
+    // If key does not exist in lock table (no txn is locking it), add it and return true
+    if (lock_table_.find(key) == lock_table_.end()) {
+        lock_table_[key] = new deque<LockRequest>;
+
+        auto lr = LockRequest(EXCLUSIVE, txn);
+        lock_table_[key]->push_back(lr);
+
+        return true;
+    } else {
+        // if key does exist, then add it to the queue
+        auto lr = LockRequest(EXCLUSIVE, txn);
+        lock_table_[key]->push_back(lr);
+
+        // we do need to add this to txn_waits_ because RunLockingScheduler()
+        // does not do that
+        txn_waits_[txn]++;
+
+        return false;
+    }
 }
 
 bool LockManagerB::ReadLock(Txn* txn, const Key& key)
 {
-    //
-    // Implement this method!
-    return true;
+    // If key does not exist in lock table (no txn is locking it), add it and return true
+    if (lock_table_.find(key) == lock_table_.end()) {
+        lock_table_[key] = new deque<LockRequest>;
+
+        auto lr = LockRequest(SHARED, txn);
+        lock_table_[key]->push_back(lr);
+
+        return true;
+    } else {
+
+        // if key does exist, then add it to the queue
+        auto lr = LockRequest(SHARED, txn);
+        lock_table_[key]->push_back(lr);
+
+        // determine if lock is immediately granted
+        // i.e. if all locks in the queue are shared
+        bool all_shared = true;
+        for (auto it = lock_table_[key]->begin(); it != lock_table_[key]->end(); it++) {
+            if (it->mode_ == EXCLUSIVE) {
+                all_shared = false;
+                break;
+            }
+        }
+
+        if (all_shared) {
+            return true;
+        } else {
+            // we do need to add this to txn_waits_ because RunLockingScheduler()
+            // does not do that
+            txn_waits_[txn]++;
+            return false;
+        }
+    }
 }
 
 void LockManagerB::Release(Txn* txn, const Key& key)
 {
-    //
-    // Implement this method!
+    // if key does not exist in lock table, return
+    if (lock_table_.find(key) == lock_table_.end()) {
+        return;
+    }
+
+    // if key does exist, then remove it from the queue
+    auto queue = lock_table_[key];
+    auto lr = queue->begin();
+    while (lr != queue->end()) {
+        if (lr->txn_ == txn) {
+            lr = queue->erase(lr);
+        } else {
+            ++lr;
+        }
+    }
+
+    // if the queue is now empty, remove the key from the lock table
+    if (queue->empty()) {
+        delete lock_table_[key];
+        lock_table_.erase(key);
+    }
+
+    // if the next transaction in the deque is ready, add it to ready_txns_
+    // if next transaction is shared, then add all the continuous shared transactions
+    // if next transaction is exclusive, then add only that transaction
+    auto txns = new vector<Txn*>;
+    for (auto it = queue->begin(); it != queue->end(); it++) {
+        if (it->mode_ == EXCLUSIVE) {
+            if (txns->empty()) {
+                txns->push_back(it->txn_);
+            }
+            break;
+        }
+        txns->push_back(it->txn_);
+    }
+
+    // add all txns to ready_txns
+    for (auto it = txns->begin(); it != txns->end(); it++) {
+        txn_waits_[*it] -= 1;
+        if (txn_waits_[*it] == 0) {
+            ready_txns_->push_back(*it);
+            txn_waits_.erase(*it);
+        }
+    }
 }
 
 // NOTE: The owners input vector is NOT assumed to be empty.
 LockMode LockManagerB::Status(const Key& key, vector<Txn*>* owners)
 {
-    //
-    // Implement this method!
-    return UNLOCKED;
+    // if key does not exist in lock table, return UNLOCKED
+    if (lock_table_.find(key) == lock_table_.end()) {
+        return UNLOCKED;
+    }
+
+    // if key does exist, then set owners to contain the txn IDs of all txns
+    // holding the lock
+    auto queue = lock_table_[key];
+
+    // Case 1. Exclusive lock
+    if (queue->front().mode_ == EXCLUSIVE) {
+        owners->clear();
+        owners->push_back(queue->front().txn_);
+        return EXCLUSIVE;
+    }
+
+    // Case 2. Shared lock
+    else {
+        owners->clear();
+        for (auto lr = queue->begin(); lr != queue->end(); lr++) {
+            if (lr->mode_ == EXCLUSIVE) {
+                break;
+            }
+            owners->push_back(lr->txn_);
+        }
+        return SHARED;
+    }
 }
