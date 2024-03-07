@@ -270,12 +270,27 @@ void TxnProcessor::ApplyWrites(Txn* txn)
 
 void TxnProcessor::RunOCCScheduler()
 {
-    //
-    // Implement this method!
-    //
-    // [For now, run serial scheduler in order to make it through the test
-    // suite]
-    RunSerialScheduler();
+    Txn* txn;
+    while (!stopped_)
+    {
+        // Get the next new txn request (if one is pending)
+        if (txn_requests_.Pop(&txn))
+        {
+            // Pass it to an execution thread
+            tp_.AddTask([this, txn]() { this->ExecuteTxn(txn); });
+        }
+        
+        // Dealing with a finished transaction
+        while (completed_txns_.Pop(&txn))
+        {
+            // Validation phase
+            // Use the data structure in `txn_processor` class to check overlap with
+            // each record whose key appears in the txn's read and write sets
+            
+        }
+    }
+
+
 }
 
 void TxnProcessor::RunOCCParallelScheduler()
