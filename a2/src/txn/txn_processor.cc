@@ -292,12 +292,12 @@ void TxnProcessor::RunOCCScheduler()
             // after the txn's occ_start_idx_
             for (int i = txn->occ_start_idx_ + 1; i < committed_txns_.Size(); i++)
             {
-                Txn* other_txn = committed_txns_[i];
+                Txn* t = committed_txns_[i];
 
-                // check if write_set of other_txn intersects with read_set of txn
+                // check if write_set of t intersects with read_set of txn
                 for (auto key : txn->readset_)
                 {
-                    if (other_txn->writeset_.find(key) != other_txn->writeset_.end())
+                    if (t->writeset_.find(key) != t->writeset_.end())
                     {
                         valid = false;
                         break;
@@ -331,8 +331,133 @@ void TxnProcessor::RunOCCScheduler()
             }
         }
     }
+}
 
+void TxnProcessor::ExecuteTxnParallel(Txn* txn)
+{
+    // Note that you can use active_set_ and active_set_mutex_ we provided
+    // for you in the txn_processor.h
 
+    // Record start time
+    txn->occ_start_idx_ = committed_txns_.Size();
+
+    // Perform "read phase" of transaction
+    // Read everything in from readset.
+    for (set<Key>::iterator it = txn->readset_.begin(); it != txn->readset_.end(); ++it)
+    {
+        // Save each read result iff record exists in storage.
+        Value result;
+        if (storage_->Read(*it, &result)) txn->reads_[*it] = result;
+    }
+
+    // Also read everything in from writeset.
+    for (set<Key>::iterator it = txn->writeset_.begin(); it != txn->writeset_.end(); ++it)
+    {
+        // Save each read result iff record exists in storage.
+        Value result;
+        if (storage_->Read(*it, &result)) txn->reads_[*it] = result;
+    }
+
+    // Execute txn's program logic.
+    txn->Run();
+
+    // Start of critical section
+    active_set_mutex_.Lock();
+
+    // Make a copy of the active set
+    auto finish_active = active_set_.GetSet();
+
+    // Add this txn to the active set
+    active_set_.Insert(txn);
+
+    // End of critical section
+    active_set_mutex_.Unlock();
+
+    // Validation phase
+    // Use the data structure in `txn_processor` class to check overlap with
+    // each record whose key appears in the txn's read and write sets
+    bool valid = true;
+
+    // NOTE: This is not in the pseudocode in the project description
+    // Check for overlap with newly committed transactions
+    // after the txn's occ_start_idx_
+    for (int i = txn->occ_start_idx_ + 1; i < committed_txns_.Size(); i++)
+    {
+        Txn* t = committed_txns_[i];
+
+        // check if write_set of t intersects with read_set of txn
+        for (auto key : txn->readset_)
+        {
+            if (t->writeset_.find(key) != t->writeset_.end())
+            {
+                valid = false;
+                break;
+            }
+        }
+    }
+
+    // Check overlap with each record whose key appears in the txn's read and write sets
+    // NOTE: we only run this if the txn hasn't been invalidated by the previous check
+    // NOTE: this is the only validation implemented in the pseudocode in the project description
+    if (valid) {
+        for (auto t : finish_active)
+        {
+            // if txn's write set intersects with t's write sets
+            for (auto key : txn->writeset_)
+            {
+                if (t->writeset_.find(key) != t->writeset_.end())
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            // if txn's read set intersects with t's write sets
+            for (auto key : txn->readset_)
+            {
+                if (t->writeset_.find(key) != t->writeset_.end())
+                {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    // If validation failed, cleanup txn and completely restart it
+    if (!valid) {
+        // Remove this txn from the active set
+        active_set_mutex_.Lock();
+        active_set_.Erase(txn);
+        active_set_mutex_.Unlock();
+
+        // Cleanup txn
+        txn->reads_.clear();
+        txn->writes_.clear();
+        txn->status_ = INCOMPLETE;
+
+        // Restart txn
+        mutex_.Lock();
+        txn->unique_id_ = next_unique_id_;
+        next_unique_id_++;
+        txn_requests_.Push(txn);
+        mutex_.Unlock();
+    } else {
+        // Apply all writes
+        ApplyWrites(txn);
+
+        // Remove this txn from the active set
+        active_set_mutex_.Lock();
+        active_set_.Erase(txn);
+        active_set_mutex_.Unlock();
+
+        // Mark transaction as committed
+        committed_txns_.Push(txn);
+        txn->status_ = COMMITTED;
+
+        // Update relevant data structure
+        txn_results_.Push(txn);
+    }
 }
 
 void TxnProcessor::RunOCCParallelScheduler()
@@ -343,10 +468,17 @@ void TxnProcessor::RunOCCParallelScheduler()
     // TxnProcessor::ExecuteTxnParallel.
     // Note that you can use active_set_ and active_set_mutex_ we provided
     // for you in the txn_processor.h
-    //
-    // [For now, run serial scheduler in order to make it through the test
-    // suite]
-    RunSerialScheduler();
+
+    Txn* txn;
+    while (!stopped_)
+    {
+        // Get the next new transaction request (if one is pending) and pass it to an execution
+        // thread that executes the txn logic *and also* does the validation and write phases.
+        if (txn_requests_.Pop(&txn))
+        {
+            tp_.AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
+        }
+    }
 }
 
 void TxnProcessor::RunMVCCScheduler()
