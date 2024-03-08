@@ -584,7 +584,6 @@ void TxnProcessor::RunMVCCScheduler()
     // Hint:Pop a txn from txn_requests_, and pass it to a thread to execute.
     // Note that you may need to create another execute method, like TxnProcessor::MVCCExecuteTxn.
 
-    
     Txn* txn;
     while (!stopped_)
     {
@@ -597,6 +596,111 @@ void TxnProcessor::RunMVCCScheduler()
     }
 }
 
+// Helper function to take the union of two sets
+set<Key> set_union(const set<Key>& s1, const set<Key>& s2)
+{
+    set<Key> result = s1;
+    result.insert(s2.begin(), s2.end());
+    return result;
+}
+
+void TxnProcessor::MVCCSSIExecuteTxn(Txn* txn)
+{
+    // Read all necessary data for this transaction from storage
+    // (Note that unlike the version of MVCC from class, you should lock the key before each read)
+
+    // Read everything in from readset.
+    for (auto key : txn->readset_)
+    {
+        // Lock the key
+        storage_->Lock(key);
+
+        // Save each read result iff record exists in storage.
+        Value result;
+        if (storage_->Read(key, &result, txn->unique_id_)) txn->reads_[key] = result;
+
+        // Unlock the key
+        storage_->Unlock(key);
+    }
+
+    // Also read everything in from writeset.
+    for (auto key : txn->writeset_)
+    {
+        // Lock the key
+        storage_->Lock(key);
+
+        // Save each read result iff record exists in storage.
+        Value result;
+        if (storage_->Read(key, &result, txn->unique_id_)) txn->reads_[key] = result;
+
+        // Unlock the key
+        storage_->Unlock(key);
+    }
+
+    // Execute txn's program logic.
+    txn->Run();
+
+    // THIS IS DIFFERENT FROM MVCCExecuteTxn: we lock write_set AND read_set
+    // Acquire all locks for keys in the read_set_ and write_set_
+    // (Lock any overlapping key only once.)
+    for (auto key : set_union(txn->writeset_, txn->readset_))
+    {
+        storage_->Lock(key);
+    }
+
+    // Call MVCCStorage::CheckWrite method to check all keys in the write_set_
+    bool checkPassed = true;
+    for (auto key : txn->writeset_)
+    {
+        if (!storage_->CheckWrite(key, txn->unique_id_))
+        {
+            checkPassed = false;
+            break;
+        }
+    }
+
+    // If each key passed the check
+    if (checkPassed)
+    {
+        // Apply the writes
+        ApplyWrites(txn);
+
+        // Release all locks for ALL keys (read_set_ and write_set_)
+        for (auto key : set_union(txn->writeset_, txn->readset_))
+        {
+            storage_->Unlock(key);
+        }
+
+        // Mark transaction as committed
+        committed_txns_.Push(txn);
+        txn->status_ = COMMITTED;
+
+        // Update relevant data structure
+        txn_results_.Push(txn);
+    } else { // At least one key failed the check
+        // Release all locks for ALL keys (read_set_ and write_set_)
+        for (auto key : set_union(txn->writeset_, txn->readset_))
+        {
+            storage_->Unlock(key);
+        }
+
+        // Cleanup txn
+        txn->reads_.clear();
+        txn->writes_.clear();
+        txn->status_ = INCOMPLETE;
+
+        // Restart txn -- same as OCC
+        mutex_.Lock();
+        txn->unique_id_ = next_unique_id_;
+        next_unique_id_++;
+        txn_requests_.Push(txn);
+        mutex_.Unlock();
+    }
+
+    // Hand the txn back to the RunScheduler thread.
+    completed_txns_.Push(txn);
+}
+
 void TxnProcessor::RunMVCCSSIScheduler()
 {
     //
@@ -604,9 +708,16 @@ void TxnProcessor::RunMVCCSSIScheduler()
 
     // Hint:Pop a txn from txn_requests_, and pass it to a thread to execute.
     // Note that you may need to create another execute method, like TxnProcessor::MVCCSSIExecuteTxn.
-    //
-    // [For now, run serial scheduler in order to make it through the test
-    // suite]
-    RunSerialScheduler();
+    
+    Txn* txn;
+    while (!stopped_)
+    {
+        // Get the next new transaction request (if one is pending) and pass it to an execution
+        // thread that executes the txn logic *and also* does the validation and write phases.
+        if (txn_requests_.Pop(&txn))
+        {
+            tp_.AddTask([this, txn]() { this->MVCCSSIExecuteTxn(txn); });
+        }
+    }
 }
 
