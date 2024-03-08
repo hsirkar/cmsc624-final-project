@@ -42,14 +42,36 @@ void MVCCStorage::Unlock(Key key)
 }
 
 // MVCC Read
+// If there exists a record for the specified key, sets '*result' equal to
+// the value associated with the key and returns true, else returns false;
+// The third parameter is the txn_unique_id(txn timestamp), which is used for MVCC.
 bool MVCCStorage::Read(Key key, Value *result, int txn_unique_id)
 {
     //
     // Implement this method!
 
-    // Hint: Iterate the version_lists and return the verion whose write timestamp
+    // Hint: Iterate the version_lists and return the version whose write timestamp
     // (version_id) is the largest write timestamp less than or equal to txn_unique_id.
-    return true;
+
+    // Check if the key exists in mvcc_data_
+    if (mvcc_data_.count(key) == 0)
+    {
+        return false;
+    }
+
+    for (auto version : *mvcc_data_[key])
+    {
+        // Return the first version whose version_id is less than or equal to txn_unique_id
+        // This assumes that the version list is sorted in descending order
+        if (version->version_id_ <= txn_unique_id)
+        {
+            *result = version->value_;
+            version->max_read_id_ = txn_unique_id;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // Check whether the txn executed on the latest version of the key.
@@ -68,6 +90,8 @@ bool MVCCStorage::CheckKey(Key key, int txn_unique_id)
 }
 
 // MVCC Write, call this method only if CheckWrite return true.
+// Inserts a new version with key and value
+// The third parameter is the txn_unique_id(txn timestamp), which is used for MVCC.
 void MVCCStorage::Write(Key key, Value value, int txn_unique_id)
 {
     //
@@ -78,4 +102,35 @@ void MVCCStorage::Write(Key key, Value value, int txn_unique_id)
     // Note that you don't have to call Lock(key) in this method, just
     // call Lock(key) before you call this method and call Unlock(key) afterward.
     // Note that the performance would be much better if you organize the versions in decreasing order.
+
+    auto version = new Version();
+    version->value_ = value;
+    version->version_id_ = txn_unique_id;
+    version->max_read_id_ = 0;
+
+    if (mvcc_data_.count(key) == 0)
+    {
+        mvcc_data_[key] = new deque<Version*>();
+        mvcc_data_[key]->push_front(version);
+    }
+    else
+    {
+        // Insert the new version in descending order
+        // NOTE: is this required? or can we just push_front?
+        // shouldn't be a performance hit either way
+        bool inserted = false;
+        for (auto v : *mvcc_data_[key])
+        {
+            if (v->version_id_ < txn_unique_id)
+            {
+                mvcc_data_[key]->push_front(version);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted)
+        {
+            mvcc_data_[key]->push_back(version);
+        }
+    }
 }
