@@ -286,7 +286,49 @@ void TxnProcessor::RunOCCScheduler()
             // Validation phase
             // Use the data structure in `txn_processor` class to check overlap with
             // each record whose key appears in the txn's read and write sets
-            
+            bool valid = true;
+
+            // Check for overlap with newly committed transactions
+            // after the txn's occ_start_idx_
+            for (int i = txn->occ_start_idx_ + 1; i < committed_txns_.Size(); i++)
+            {
+                Txn* other_txn = committed_txns_[i];
+
+                // check if write_set of other_txn intersects with read_set of txn
+                for (auto key : txn->readset_)
+                {
+                    if (other_txn->writeset_.find(key) != other_txn->writeset_.end())
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+
+            // If validation failed, cleanup txn and completely restart it
+            if (!valid) {
+                // Cleanup txn
+                txn->reads_.clear();
+                txn->writes_.clear();
+                txn->status_ = INCOMPLETE;
+
+                // Restart txn
+                mutex_.Lock();
+                txn->unique_id_ = next_unique_id_;
+                next_unique_id_++;
+                txn_requests_.Push(txn);
+                mutex_.Unlock();
+            } else {
+                // Apply all writes
+                ApplyWrites(txn);
+
+                // Mark transaction as committed
+                committed_txns_.Push(txn);
+                txn->status_ = COMMITTED;
+
+                // Update relevant data structure
+                txn_results_.Push(txn);
+            }
         }
     }
 
