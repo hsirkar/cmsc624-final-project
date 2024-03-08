@@ -86,7 +86,15 @@ bool MVCCStorage::CheckKey(Key key, int txn_unique_id)
     // each key (as necessary). Return true if this key passes the check, return false if not.
     // Note that you don't have to call Lock(key) in this method, just
     // call Lock(key) before you call this method and call Unlock(key) afterward.
-    return true;
+
+    // If key doesn't exist, or if deque is empty for some reason, return false
+    if (mvcc_data_.count(key) == 0 || mvcc_data_[key]->empty())
+    {
+        return false;
+    }
+
+    // Assuming that the version list is sorted in descending order
+    return txn_unique_id >= mvcc_data_[key]->front()->version_id_;
 }
 
 // MVCC Write, call this method only if CheckWrite return true.
