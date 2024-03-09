@@ -1,0 +1,106 @@
+UpdateCTestConfiguration  from :/home/chujun/cmsc624-assignment-2-hsirkar/a2/build/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/home/chujun/cmsc624-assignment-2-hsirkar/a2/build/DartConfiguration.tcl
+Test project /home/chujun/cmsc624-assignment-2-hsirkar/a2/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: lock_manager_test
+
+1: Test command: /home/chujun/cmsc624-assignment-2-hsirkar/a2/build/src/lock_manager_test
+1: Test timeout computed to be: 10000000
+1: [ LockManagerA_SimpleLocking ] [1;32mBEGIN[0m
+1: [ LockManagerA_SimpleLocking ] [1;32mPASS[0m
+1: [ LockManagerA_LocksReleasedOutOfOrder ] [1;32mBEGIN[0m
+1: [ LockManagerA_LocksReleasedOutOfOrder ] [1;32mPASS[0m
+1: [ LockManagerB_SimpleLocking ] [1;32mBEGIN[0m
+1: [ LockManagerB_SimpleLocking ] [1;32mPASS[0m
+1: [ LockManagerB_LocksReleasedOutOfOrder ] [1;32mBEGIN[0m
+1: [ LockManagerB_LocksReleasedOutOfOrder ] [1;32mPASS[0m
+1/3 Test #1: lock_manager_test ................   Passed    0.00 sec
+test 2
+    Start 2: txn_processor_test
+
+2: Test command: /home/chujun/cmsc624-assignment-2-hsirkar/a2/build/src/txn_processor_test
+2: Test timeout computed to be: 10000000
+2: 		-------------------------------------------------------------------
+2: 		                Average Transaction Duration
+2: 		-------------------------------------------------------------------
+2: 		0.1ms		1ms		10ms		(0.1ms, 1ms, 10ms)
+2: 		-------------------------------------------------------------------
+2: 		            Low contention Read only (5 records)
+2: 		-------------------------------------------------------------------
+2:  Serial   	9716.96		997.016		99.8835		313.56	
+2:  Locking A	35618.8		4098.99		552.308		1746.46	
+2:  Locking B	31549.6		3650.83		549.594		1809.39	
+2:  OCC      	31431		4418.57		546.296		1680.54	
+2:  OCC-P    	30711.2		3791.46		576.895		1688.25	
+2:  MVCC     	32936.5		4214.18		554.702		1755.73	
+2: 
+2: 		            Low contention Read only (30 records)
+2: 		-------------------------------------------------------------------
+2:  Serial   	8568.6		982.599		99.7207		305.247	
+2:  Locking A	26276.7		3665.66		585.083		1756.14	
+2:  Locking B	27794.9		4213.55		590.018		1609.77	
+2:  OCC      	21616.8		4108.36		546.038		1695.91	
+2:  OCC-P    	30314.2		4161.31		520.913		1860.59	
+2:  MVCC     	25058.2		3448.04		563.125		1799.2	
+2: 
+2: 		            High contention Read only (5 records)
+2: 		-------------------------------------------------------------------
+2:  Serial   	9828.09		997.595		99.9363		288.584	
+2:  Locking A	16813		1917.34		237.797		563.223	
+2:  Locking B	33447.1		4073.06		586.386		1607.87	
+2:  OCC      	31876.1		3528.68		537.894		1555.6	
+2:  OCC-P    	30523		3902.32		568.288		1690.18	
+2:  MVCC     	35785.1		3788.56		565.989		1863.98	
+2: 
+2: 		            High contention Read only (30 records)
+2: 		-------------------------------------------------------------------
+2:  Serial   	9428.17		992.66		99.8192		325.335	
+2:  Locking A	6834.48		943.425		99.3604		307.987	
+2:  Locking B	26755.2		4023.98		567.356		1712.76	
+2:  OCC      	28771.8		4117.45		507.685		1694.72	
+2:  OCC-P    	27465.4		3783.52		531.471		1613.19	
+2:  MVCC     	30106.8		3956.94		576.702		1684.15	
+2: 
+2: 		            Low contention read-write (5 records)
+2: 		-------------------------------------------------------------------
+2:  Serial   	9513.87		994.052		99.8546		309.68	
+2:  Locking A	36889.9		3897.53		553.967		1621.87	
+2:  Locking B	30945		4078.81		581.53		1565.23	
+2:  OCC      	30466.6		4100		576.284		1681.17	
+2:  OCC-P    	29892.5		4519.48		559.376		1656.6	
+2:  MVCC     	31402.6		3889.38		544.255		1746.08	
+2: 
+2: 		            Low contention read-write (10 records)
+2: 		-------------------------------------------------------------------
+2:  Serial   	9082.91		989.041		99.8009		327.238	
+2:  Locking A	30224.8		4107.88		547.582		1823.92	
+2:  Locking B	29481.2		4131.52		523.894		1731.96	
+2:  OCC      	30351.3		3578.4		533.597		1676.96	
+2:  OCC-P    	29161.9		3894.45		566.126	
+2/3 Test #2: txn_processor_test ...............***Exception: SIGHUP2353.65 sec
+test 3
+    Start 3: txn_types_test
+
+3: Test command: /home/chujun/cmsc624-assignment-2-hsirkar/a2/build/src/txn_types_test
+3: Test timeout computed to be: 10000000
+3: [ NoopTest ] [1;32mBEGIN[0m
+3: [ NoopTest ] [1;32mPASS[0m
+3: [ PutTest ] [1;32mBEGIN[0m
+3: [ PutTest ] [1;32mPASS[0m
+3: [ PutMultipleTest ] [1;32mBEGIN[0m
+3: [ PutMultipleTest ] [1;32mPASS[0m
+3/3 Test #3: txn_types_test ...................   Passed    0.70 sec
+
+67% tests passed, 1 tests failed out of 3
+
+Total Test time (real) = 2354.36 sec
+
+The following tests FAILED:
+	  2 - txn_processor_test (SIGHUP)
+Errors while running CTest
