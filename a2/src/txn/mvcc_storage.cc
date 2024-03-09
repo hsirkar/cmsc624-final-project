@@ -119,26 +119,13 @@ void MVCCStorage::Write(Key key, Value value, int txn_unique_id)
     if (mvcc_data_.count(key) == 0)
     {
         mvcc_data_[key] = new deque<Version*>();
-        mvcc_data_[key]->push_front(version);
     }
-    else
+    
+    // Insert the new version in descending order
+    auto it = mvcc_data_[key]->begin();
+    while (it != mvcc_data_[key]->end() && (*it)->version_id_ > txn_unique_id)
     {
-        // Insert the new version in descending order
-        // NOTE: is this required? or can we just push_front?
-        // shouldn't be a performance hit either way
-        bool inserted = false;
-        for (auto v : *mvcc_data_[key])
-        {
-            if (v->version_id_ < txn_unique_id)
-            {
-                mvcc_data_[key]->push_front(version);
-                inserted = true;
-                break;
-            }
-        }
-        if (!inserted)
-        {
-            mvcc_data_[key]->push_back(version);
-        }
+        ++it;
     }
+    mvcc_data_[key]->insert(it, version);
 }
