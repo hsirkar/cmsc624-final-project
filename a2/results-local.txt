@@ -1,0 +1,131 @@
+UpdateCTestConfiguration  from :/home/rakrish/cmsc624-assignment-2-hsirkar/a2/build/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/home/rakrish/cmsc624-assignment-2-hsirkar/a2/build/DartConfiguration.tcl
+Test project /home/rakrish/cmsc624-assignment-2-hsirkar/a2/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: lock_manager_test
+
+1: Test command: /home/rakrish/cmsc624-assignment-2-hsirkar/a2/build/src/lock_manager_test
+1: Test timeout computed to be: 10000000
+1: [ LockManagerA_SimpleLocking ] BEGIN
+1: [ LockManagerA_SimpleLocking ] PASS
+1: [ LockManagerA_LocksReleasedOutOfOrder ] BEGIN
+1: [ LockManagerA_LocksReleasedOutOfOrder ] PASS
+1: [ LockManagerB_SimpleLocking ] BEGIN
+1: [ LockManagerB_SimpleLocking ] PASS
+1: [ LockManagerB_LocksReleasedOutOfOrder ] BEGIN
+1: [ LockManagerB_LocksReleasedOutOfOrder ] PASS
+1/3 Test #1: lock_manager_test ................   Passed    0.00 sec
+test 2
+    Start 2: txn_processor_test
+
+2: Test command: /home/rakrish/cmsc624-assignment-2-hsirkar/a2/build/src/txn_processor_test
+2: Test timeout computed to be: 10000000
+2:              -------------------------------------------------------------------
+2:                              Average Transaction Duration
+2:              -------------------------------------------------------------------
+2:              0.1ms           1ms             10ms            (0.1ms, 1ms, 10ms)
+2:              -------------------------------------------------------------------
+2:                          Low contention Read only (5 records)
+2:              -------------------------------------------------------------------
+2:  Serial      9353.24         986.725         99.8961         307.272
+2:  Locking A   45961.7         4949.24         504.833         1612.08
+2:  Locking B   44207.2         4749.53         499.046         1595.17
+2:  OCC         39627           5177.35         502.182         1599.72
+2:  OCC-P       43216.1         4614.02         527.13          1590.78
+2:  MVCC        42699.8         4074.76         470.503         1271.99
+2: 
+2:                          Low contention Read only (30 records)
+2:              -------------------------------------------------------------------
+2:  Serial      7068.44         952.213         98.778          297.207
+2:  Locking A   34212.2         4427.85         529.837         1499.6
+2:  Locking B   32432.1         4543.32         461.273         1477.48
+2:  OCC         34257.2         4902.8          505.618         1598.29
+2:  OCC-P       34831.6         4861.04         528.666         1431.35
+2:  MVCC        27526           4796.63         473.149         1707.05
+2: 
+2:                          High contention Read only (5 records)
+2:              -------------------------------------------------------------------
+2:  Serial      9617.38         991.26          99.8387         306.798
+2:  Locking A   14847.8         2408.85         224.074         610.207
+2:  Locking B   46484.5         4915.92         514.183         1498.07
+2:  OCC         45882.4         4438.51         506.066         1785.54
+2:  OCC-P       46149.3         4928.72         464.263         1624.62
+2:  MVCC        45265           4915.01         467.868         1543.39
+2: 
+2:                          High contention Read only (30 records)
+2:              -------------------------------------------------------------------
+2:  Serial      8147.36         976.521         99.5533         301.203
+2:  Locking A   4099.51         863.127         98.1266         279.348
+2:  Locking B   22866.3         4564.36         463.793         1616.51
+2:  OCC         39039.1         4952.75         517.843         1514.24
+2:  OCC-P       39358.1         4770.26         470.06          1562.94
+2:  MVCC        40279.2         4577.25         519.622         1576.64
+2: 
+2:                          Low contention read-write (5 records)
+2:              -------------------------------------------------------------------
+2:  Serial      8898.86         981.551         99.6855         311.98
+2:  Locking A   44303.1         4757.36         497.865         1475.73
+2:  Locking B   43628.4         4762.4          444.584         1723.9
+2:  OCC         43912.3         4638.45         498.398         1538.85
+2:  OCC-P       41784.4         4715.85         480.668         1552.07
+2:  MVCC        39376.3         4284.41         472.334         1638.97
+2: 
+2:                          Low contention read-write (10 records)
+2:              -------------------------------------------------------------------
+2:  Serial      7923.22         966.082         99.506          280.291
+2:  Locking A   40336.8         4976.93         464.09          1425.99
+2:  Locking B   40524.5         4423.03         471.033         1621.5
+2:  OCC         41933.2         4972.46         466.662         1697.73
+2:  OCC-P       37311.8         4479.14         512.387         1668.19
+2:  MVCC        35058.9         4491.82         519.473         1716.54
+2: 
+2:                          High contention read-write (5 records)
+2:              -------------------------------------------------------------------
+2:  Serial      9370.28         987.004         99.7335         275.59
+2:  Locking A   15378.3         2323.37         256.837         653.895
+2:  Locking B   14644.3         2380.21         255.189         610.631
+2:  OCC         45722.1         5168.15         493.913         1687.46
+2:  OCC-P       42009.8         4658.12         482.882         1437.49
+2:  MVCC        13412.4         1602.79         178.788         426.531
+2: 
+2:                          High contention read-write (10 records)
+2:              -------------------------------------------------------------------
+2:  Serial      8658.83         980.381         99.6191         307.486
+2:  Locking A   6674.07         1211.27         128.906         315.77
+2:  Locking B   6694.29         1213.57         122.786         333.799
+2:  OCC         43174.6         5059.01         521.533         1418.63
+2:  OCC-P       34415.6         4354.08         448.978         1370.47
+2:  MVCC        8126.61         1180.77         122.956         267.424
+2: 
+2:                          High contention mixed read only/read-write
+2:              -------------------------------------------------------------------
+2:  Serial      10156.4         1191.46         131.373         373.461
+2:  Locking A   5050.07         1092.6          120.272         350.301
+2:  Locking B   30489.7         4513.19         486.337         1515.96
+2:  OCC         30556.2         3552.46         344.603         697.891
+2:  OCC-P       29392.2         3877.22         382.056         754.179
+2:  MVCC        33276.8         5955.45         650.538         1957.27
+2: 
+2/3 Test #2: txn_processor_test ...............   Passed  1508.63 sec
+test 3
+    Start 3: txn_types_test
+
+3: Test command: /home/rakrish/cmsc624-assignment-2-hsirkar/a2/build/src/txn_types_test
+3: Test timeout computed to be: 10000000
+3: [ NoopTest ] BEGIN
+3: [ NoopTest ] PASS
+3: [ PutTest ] BEGIN
+3: [ PutTest ] PASS
+3: [ PutMultipleTest ] BEGIN
+3: [ PutMultipleTest ] PASS
+3/3 Test #3: txn_types_test ...................   Passed    1.33 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) = 1509.96 sec
