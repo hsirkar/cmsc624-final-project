@@ -565,9 +565,6 @@ void TxnProcessor::MVCCExecuteTxn(Txn* txn)
         txn_requests_.Push(txn);
         mutex_.Unlock();
     }
-
-    // Hand the txn back to the RunScheduler thread.
-    completed_txns_.Push(txn);
 }
 
 void TxnProcessor::RunMVCCScheduler()
@@ -668,9 +665,6 @@ void TxnProcessor::MVCCSSIExecuteTxn(Txn* txn)
         txn_requests_.Push(txn);
         mutex_.Unlock();
     }
-
-    // Hand the txn back to the RunScheduler thread.
-    completed_txns_.Push(txn);
 }
 
 void TxnProcessor::RunMVCCSSIScheduler()
