@@ -481,27 +481,21 @@ void TxnProcessor::RunOCCParallelScheduler()
     }
 }
 
+// Helper function to take the union of two sets
+set<Key> set_union(const set<Key>& s1, const set<Key>& s2)
+{
+    set<Key> result = s1;
+    result.insert(s2.begin(), s2.end());
+    return result;
+}
+
 void TxnProcessor::MVCCExecuteTxn(Txn* txn)
 {
     // Read all necessary data for this transaction from storage
     // (Note that unlike the version of MVCC from class, you should lock the key before each read)
 
-    // Read everything in from readset.
-    for (auto key : txn->readset_)
-    {
-        // Lock the key
-        storage_->Lock(key);
-
-        // Save each read result iff record exists in storage.
-        Value result;
-        if (storage_->Read(key, &result, txn->unique_id_)) txn->reads_[key] = result;
-
-        // Unlock the key
-        storage_->Unlock(key);
-    }
-
-    // Also read everything in from writeset.
-    for (auto key : txn->writeset_)
+    // Read everything in from readset and writeset.
+    for (auto key : set_union(txn->readset_, txn->writeset_))
     {
         // Lock the key
         storage_->Lock(key);
@@ -527,7 +521,7 @@ void TxnProcessor::MVCCExecuteTxn(Txn* txn)
     bool checkPassed = true;
     for (auto key : txn->writeset_)
     {
-        if (!storage_->CheckWrite(key, txn->unique_id_))
+        if (!((MVCCStorage* ) storage_)->CheckKey(key, txn->unique_id_))
         {
             checkPassed = false;
             break;
@@ -596,35 +590,13 @@ void TxnProcessor::RunMVCCScheduler()
     }
 }
 
-// Helper function to take the union of two sets
-set<Key> set_union(const set<Key>& s1, const set<Key>& s2)
-{
-    set<Key> result = s1;
-    result.insert(s2.begin(), s2.end());
-    return result;
-}
-
 void TxnProcessor::MVCCSSIExecuteTxn(Txn* txn)
 {
     // Read all necessary data for this transaction from storage
     // (Note that unlike the version of MVCC from class, you should lock the key before each read)
 
-    // Read everything in from readset.
-    for (auto key : txn->readset_)
-    {
-        // Lock the key
-        storage_->Lock(key);
-
-        // Save each read result iff record exists in storage.
-        Value result;
-        if (storage_->Read(key, &result, txn->unique_id_)) txn->reads_[key] = result;
-
-        // Unlock the key
-        storage_->Unlock(key);
-    }
-
-    // Also read everything in from writeset.
-    for (auto key : txn->writeset_)
+    // Read everything in from readset and writeset.
+    for (auto key : set_union(txn->readset_, txn->writeset_))
     {
         // Lock the key
         storage_->Lock(key);
@@ -652,7 +624,7 @@ void TxnProcessor::MVCCSSIExecuteTxn(Txn* txn)
     bool checkPassed = true;
     for (auto key : txn->writeset_)
     {
-        if (!storage_->CheckWrite(key, txn->unique_id_))
+        if (!((MVCCStorage* ) storage_)->CheckKey(key, txn->unique_id_))
         {
             checkPassed = false;
             break;
