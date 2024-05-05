@@ -1,10 +1,5 @@
-if(MSVC)
-    message(ERROR "We don't support Windows, please consider build with Linux or Mac OS.")
-else(MSVC)
-    include(CheckCXXCompilerFlag)
-    CHECK_CXX_COMPILER_FLAG("-std=c++11" SUPPORT_CXX11)
-    set(CMAKE_CXX_FLAGS "-Wall -std=c++11 -fPIC ${CMAKE_CXX_FLAGS}")
-endif(MSVC)
+set(CMAKE_CXX_STANDARD 20 REQUIRED)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 #####
 # Change the default build type from Debug to Release, while still
