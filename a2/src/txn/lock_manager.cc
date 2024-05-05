@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <deque>
+#include <ranges>
 
 #include "lock_manager.h"
 
@@ -331,8 +332,11 @@ bool LockManagerC::ReadLock(Txn *txn, const Key &key) {
 
 void LockManagerC::Release(Txn *txn, const Key &key) {
   std::deque<LockRequest> *locks_deque = lock_table_[key];
+
   // When we call release we are removing txns that we just figured out conflict
-  auto res = std::ranges::remove(*locks_deque, txn, &LockRequest::txn_);
+  auto [begin, end] =
+      std::ranges::remove(*locks_deque, txn, &LockRequest::txn_);
+  locks_deque->erase(begin, end);
 }
 
 LockMode LockManagerC::Status(const Key &key, vector<Txn *> *owners) {
