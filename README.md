@@ -3,5 +3,5 @@
 Pranav Sivaraman
 Rakrish Dhakal
 Alex Movsesyan
-Sathwik Yannamaddi
+Sathwik Yanamaddi
 Daniel Wei
