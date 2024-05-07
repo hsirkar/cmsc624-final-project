@@ -60,6 +60,7 @@ TxnProcessor::~TxnProcessor()
     // Wait for the scheduler thread to join back before destroying the object and its thread pool.
     stopped_ = true;
     pthread_join(scheduler_thread_, NULL);
+	pthread_join(calvin_sequencer_thread, NULL);
 
     if (mode_ == LOCKING_EXCLUSIVE_ONLY || mode_ == LOCKING) delete lm_;
 
@@ -110,6 +111,8 @@ void TxnProcessor::RunScheduler()
             break;
         case MVCC:
             RunMVCCScheduler();
+		case CALVIN:
+			pthread_create(&calvin_sequencer_thread, NULL, calvin_seqeuencer_helper, reinterpret_cast<void*>(this));
     }
 }
 
@@ -173,6 +176,10 @@ void TxnProcessor::RunCalvinSequencer() {
 		}
 
 	}
+}
+void* TxnProcessor::calvin_seqeuencer_helper(void *arg) {
+	reinterpret_cast<TxnProcessor*>(arg)->RunCalvinSequencer();
+	return NULL;
 }
 
 void TxnProcessor::RunLockingScheduler()
