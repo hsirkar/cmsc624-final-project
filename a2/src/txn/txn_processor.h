@@ -59,6 +59,14 @@ class TxnProcessor
     static void* StartScheduler(void* arg);
 
    private:
+	// defining epoch for ease of use
+	typedef std::queue<Txn*> Epoch;
+
+	// queue of epochs for calvin scheduler
+	AtomicQueue<Epoch*> epoch_queue;
+
+	void RunCalvinSequencer();
+
     // Serial validation
     bool SerialValidate(Txn* txn);
 
