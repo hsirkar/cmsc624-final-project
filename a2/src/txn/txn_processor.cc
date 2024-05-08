@@ -105,7 +105,11 @@ void TxnProcessor::RunScheduler() {
   case MVCC:
     RunMVCCScheduler();
     break;
+    break;
   case CALVIN:
+    RunCalvinScheduler();
+    break;
+  case CALVIN_EPOCH:
     RunCalvinScheduler();
     break;
   case CALVIN_EPOCH:
