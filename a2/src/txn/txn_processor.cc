@@ -136,38 +136,6 @@ void TxnProcessor::RunSerialScheduler() {
     }
   }
 }
-void TxnProcessor::RunCalvinSequencer() {
-  Txn *txn;
-  // save time of last epoch for calvin sequencer
-  auto last_epoch_time = std::chrono::high_resolution_clock::now();
-  // set up current epoch
-  Epoch *current_epoch = new Epoch();
-  while (!stopped_) {
-    // Add the txn to the epoch.
-    if (txn_requests_.Pop(&txn)) {
-      current_epoch->push(txn);
-    }
-
-    // check if we need to close the epoch
-    auto curr_time = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        curr_time - last_epoch_time);
-    if (duration.count() > 10) {
-      // new epoch is out of scope
-      last_epoch_time = curr_time;
-
-      // make new epoch if last epoch has anything in it
-      if (!current_epoch->empty()) {
-        epoch_queue.Push(current_epoch);
-        current_epoch = new Epoch();
-      }
-    }
-  }
-}
-void *TxnProcessor::calvin_sequencer_helper(void *arg) {
-  reinterpret_cast<TxnProcessor *>(arg)->RunCalvinSequencer();
-  return NULL;
-}
 
 void TxnProcessor::RunLockingScheduler() {
   Txn *txn;
@@ -270,11 +238,92 @@ void TxnProcessor::ExecuteTxn(Txn *txn) {
   completed_txns_.Push(txn);
 }
 
-void TxnProcessor::RunCalvinScheduler() {
-  Epoch *curr_epoch;
+void TxnProcessor::RunCalvinSequencer() {
+  Txn *txn;
+  // save time of last epoch for calvin sequencer
+  auto last_epoch_time = std::chrono::high_resolution_clock::now();
+  // set up current epoch
+  Epoch *current_epoch = new Epoch();
   while (!stopped_) {
-    // Get the next new epoch
-    if (epoch_queue.Pop(&curr_epoch)) {
+    // Add the txn to the epoch.
+    if (txn_requests_.Pop(&txn)) {
+      current_epoch->push(txn);
+    }
+
+    // check if we need to close the epoch
+    auto curr_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        curr_time - last_epoch_time);
+    if (duration.count() > 10) {
+      // new epoch is out of scope
+      last_epoch_time = curr_time;
+
+      // make new epoch if last epoch has anything in it
+      if (!current_epoch->empty()) {
+        epoch_queue.Push(current_epoch);
+        current_epoch = new Epoch();
+      }
+    }
+  }
+}
+
+void *TxnProcessor::calvin_sequencer_helper(void *arg) {
+  reinterpret_cast<TxnProcessor *>(arg)->RunCalvinSequencer();
+  return NULL;
+}
+
+// RIGHT NOW THIS IS A COPY OF TXNPROCESSOR::EXECUTETXN
+void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
+  // Get the current commited transaction index for the further validation.
+  txn->occ_start_idx_ = committed_txns_.Size();
+
+  // Read everything in from readset.
+  for (set<Key>::iterator it = txn->readset_.begin(); it != txn->readset_.end();
+       ++it) {
+    // Save each read result iff record exists in storage.
+    Value result;
+    if (storage_->Read(*it, &result))
+      txn->reads_[*it] = result;
+  }
+
+  // Also read everything in from writeset.
+  for (set<Key>::iterator it = txn->writeset_.begin();
+       it != txn->writeset_.end(); ++it) {
+    // Save each read result iff record exists in storage.
+    Value result;
+    if (storage_->Read(*it, &result))
+      txn->reads_[*it] = result;
+  }
+
+  // Execute txn's program logic.
+  txn->Run();
+
+  // Hand the txn back to the RunScheduler thread.
+  completed_txns_.Push(txn);
+}
+
+void TxnProcessor::RunCalvinScheduler() {
+  bool use_epochs = true;
+
+  Txn *txn;
+  Epoch *curr_epoch;
+
+  while (!stopped_) {
+    if (use_epochs) {
+      // Get the next epoch
+      // Execute all transactions in the epoch
+      if (epoch_queue.Pop(&curr_epoch)) {
+        for (auto txn : *curr_epoch) {
+          tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
+        }
+      }
+    } else {
+      // Get the next new transaction request (if one is pending) and pass it to
+      // an execution thread that executes the txn logic *and also* does the
+      // validation and write phases.
+      if (txn_requests_.Pop(&txn)) {
+        tp_.AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
+      }
     }
   }
 }
