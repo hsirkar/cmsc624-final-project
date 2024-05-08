@@ -111,7 +111,7 @@ void TxnProcessor::RunScheduler() {
   case CALVIN_EPOCH:
     pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
                    reinterpret_cast<void *>(this));
-    RunCalvinScheduler();
+    RunCalvinEpochScheduler();
   }
 }
 
@@ -300,24 +300,25 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
 
 void TxnProcessor::RunCalvinScheduler() {
   Txn *txn;
+
+  while (!stopped_) {
+    // Get the next new transaction request (if one is pending) and pass it to
+    // an execution thread that executes the txn logic *and also* does the
+    // validation and write phases.
+    if (txn_requests_.Pop(&txn)) {
+      // ...
+    }
+  }
+}
+
+void TxnProcessor::RunCalvinEpochScheduler() {
   Epoch *curr_epoch;
 
   while (!stopped_) {
-    if (_mode == CALVIN_EPOCH) {
-      // Get the next epoch
-      // Execute all transactions in the epoch
-      if (epoch_queue.Pop(&curr_epoch)) {
-        for (auto txn : *curr_epoch) {
-          tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
-        }
-      }
-    } else {
-      // Get the next new transaction request (if one is pending) and pass it to
-      // an execution thread that executes the txn logic *and also* does the
-      // validation and write phases.
-      if (txn_requests_.Pop(&txn)) {
-        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
-      }
+    // Get the next epoch
+    // Execute all transactions in the epoch
+    if (epoch_queue.Pop(&curr_epoch)) {
+      // ...
     }
   }
 }
