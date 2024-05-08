@@ -81,10 +81,8 @@ private:
   static void *calvin_sequencer_helper(void *arg);
 
   // Calvin Scheduler Stuff
-  std::unordered_map<Key, CalvinLock> lock_table;
-  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj;
-  std::unordered_map<Txn *, std::atomic<int>>
-      indegree; // indegree needs to be atomic
+  std::unordered_map<Txn*, std::unordered_set<Txn*>> adj;
+  std::unordered_map<Txn*, std::atomic<int>> indegree;
 
   // Serial validation
   bool SerialValidate(Txn *txn);

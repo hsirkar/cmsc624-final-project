@@ -305,9 +305,6 @@ void TxnProcessor::RunCalvinScheduler() {
   std::unordered_map<Key, std::unordered_set<Txn*>> shared_holders;
   std::unordered_map<Key, Txn*> last_excl;
 
-  std::unordered_map<Txn*, std::unordered_set<Txn*>> adj;
-  std::unordered_map<Txn*, int> indegree;
-
   while (!stopped_) {
     // Get the next new transaction request (if one is pending) and pass it to
     // an execution thread that executes the txn logic *and also* does the
