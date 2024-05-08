@@ -2,6 +2,7 @@
 #include <set>
 #include <stdio.h>
 #include <unordered_set>
+#include <chrono>
 
 #include "lock_manager.h"
 
@@ -274,6 +275,11 @@ void TxnProcessor::RunCalvinScheduler() {
   while (!stopped_) {
     // Get the next new epoch
     if (epoch_queue.Pop(&curr_epoch)) {
+      std::cout << "[";
+      for (auto txn : *curr_epoch) {
+        std::cout << txn->unique_id_ << ", ";
+      }
+      std::cout << "]" << std::endl;
     }
   }
 }

@@ -21,8 +21,9 @@ using std::deque;
 using std::map;
 using std::string;
 
-// The TxnProcessor supports five different execution modes, corresponding to
-// the four parts of assignment 2, plus a simple serial (non-concurrent) mode.
+// The TxnProcessor supports six different execution modes, corresponding to
+// the four parts of assignment 2, plus a simple serial (non-concurrent) mode,
+// plus Calvin (as a part of the final project).
 enum CCMode {
   SERIAL = 0,                 // Serial transaction execution (no concurrency)
   LOCKING_EXCLUSIVE_ONLY = 1, // Part 1A
@@ -76,7 +77,7 @@ private:
   // queue of epochs for calvin scheduler
   AtomicQueue<Epoch *> epoch_queue;
   // helper function to call calvin sequencer in pthread
-  static void *calvin_seqeuencer_helper(void *arg);
+  static void *calvin_sequencer_helper(void *arg);
 
   // Calvin Scheduler Stuff
   std::unordered_map<Key, CalvinLock> lock_table;
