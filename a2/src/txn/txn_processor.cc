@@ -104,7 +104,7 @@ void TxnProcessor::RunScheduler() {
   case MVCC:
     RunMVCCScheduler();
   case CALVIN:
-    pthread_create(&calvin_sequencer_thread, NULL, calvin_seqeuencer_helper,
+    pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
                    reinterpret_cast<void *>(this));
   }
 }
@@ -141,7 +141,7 @@ void TxnProcessor::RunCalvinSequencer() {
   // set up current epoch
   Epoch *current_epoch = new Epoch();
   while (!stopped_) {
-    // Add the process to the epoch.
+    // Add the txn to the epoch.
     if (txn_requests_.Pop(&txn)) {
       current_epoch->push(txn);
     }
@@ -162,7 +162,7 @@ void TxnProcessor::RunCalvinSequencer() {
     }
   }
 }
-void *TxnProcessor::calvin_seqeuencer_helper(void *arg) {
+void *TxnProcessor::calvin_sequencer_helper(void *arg) {
   reinterpret_cast<TxnProcessor *>(arg)->RunCalvinSequencer();
   return NULL;
 }
