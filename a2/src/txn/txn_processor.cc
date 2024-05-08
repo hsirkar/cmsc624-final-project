@@ -106,6 +106,7 @@ void TxnProcessor::RunScheduler() {
   case CALVIN:
     pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
                    reinterpret_cast<void *>(this));
+    RunCalvinScheduler();
   }
 }
 
@@ -266,6 +267,15 @@ void TxnProcessor::ExecuteTxn(Txn *txn) {
 
   // Hand the txn back to the RunScheduler thread.
   completed_txns_.Push(txn);
+}
+
+void TxnProcessor::RunCalvinScheduler() {
+  Epoch *curr_epoch;
+  while (!stopped_) {
+    // Get the next new epoch
+    if (epoch_queue.Pop(&curr_epoch)) {
+    }
+  }
 }
 
 void TxnProcessor::ApplyWrites(Txn *txn) {

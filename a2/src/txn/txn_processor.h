@@ -1,9 +1,12 @@
 #ifndef _TXN_PROCESSOR_H_
 #define _TXN_PROCESSOR_H_
 
+#include <atomic>
 #include <deque>
 #include <map>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "lock_manager.h"
 #include "mvcc_storage.h"
@@ -29,6 +32,11 @@ enum CCMode {
   MVCC = 5,                   // Part 4
   MVCC_SSI = 6,               // Part 5
   CALVIN = 7,
+};
+
+struct CalvinLock {
+  LockMode status;
+  std::unordered_set<Txn *> holders;
 };
 
 // Returns a human-readable string naming of the providing mode.
@@ -70,6 +78,12 @@ private:
   // helper function to call calvin sequencer in pthread
   static void *calvin_seqeuencer_helper(void *arg);
 
+  // Calvin Scheduler Stuff
+  std::unordered_map<Key, CalvinLock> lock_table;
+  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj;
+  std::unordered_map<Txn *, std::atomic<int>>
+      indegree; // indegree needs to be atomic
+
   // Serial validation
   bool SerialValidate(Txn *txn);
 
@@ -93,6 +107,8 @@ private:
 
   // MVCC SSI version of scheduler.
   void RunMVCCSSIScheduler();
+
+  void RunCalvinScheduler();
 
   // Performs all reads required to execute the transaction, then executes the
   // transaction logic.
