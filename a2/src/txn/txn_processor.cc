@@ -60,6 +60,7 @@ TxnProcessor::~TxnProcessor()
     // Wait for the scheduler thread to join back before destroying the object and its thread pool.
     stopped_ = true;
     pthread_join(scheduler_thread_, NULL);
+	pthread_join(calvin_sequencer_thread, NULL);
 
     if (mode_ == LOCKING_EXCLUSIVE_ONLY || mode_ == LOCKING) delete lm_;
 
@@ -110,6 +111,8 @@ void TxnProcessor::RunScheduler()
             break;
         case MVCC:
             RunMVCCScheduler();
+		case CALVIN:
+			pthread_create(&calvin_sequencer_thread, NULL, calvin_seqeuencer_helper, reinterpret_cast<void*>(this));
     }
 }
 
@@ -146,10 +149,43 @@ void TxnProcessor::RunSerialScheduler()
         }
     }
 }
+void TxnProcessor::RunCalvinSequencer() {
+	Txn *txn;
+	// save time of last epoch for calvin sequencer
+	auto last_epoch_time = std::chrono::high_resolution_clock::now();
+	// set up current epoch
+	Epoch* current_epoch = new Epoch();
+	while (!stopped_) {
+		// Add the process to the epoch.
+		if (txn_requests_.Pop(&txn)){
+			current_epoch->push(txn);
+		}
+
+		// check if we need to close the epoch
+		auto curr_time = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(curr_time - last_epoch_time);
+		if(duration.count() > 10) {
+			// new epoch is out of scope
+			last_epoch_time = curr_time;
+
+			// make new epoch if last epoch has anything in it
+			if(!current_epoch->empty()) {
+				epoch_queue.Push(current_epoch);
+				current_epoch = new Epoch();
+			}
+		}
+
+	}
+}
+void* TxnProcessor::calvin_seqeuencer_helper(void *arg) {
+	reinterpret_cast<TxnProcessor*>(arg)->RunCalvinSequencer();
+	return NULL;
+}
 
 void TxnProcessor::RunLockingScheduler()
 {
     Txn* txn;
+
     while (!stopped_)
     {
         // Start processing the next incoming transaction request.

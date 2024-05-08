@@ -29,6 +29,7 @@ enum CCMode
     P_OCC                  = 4,  // Part 3
     MVCC                   = 5,  // Part 4
     MVCC_SSI               = 6,  // Part 5
+	CALVIN				   = 7,
 };
 
 // Returns a human-readable string naming of the providing mode.
@@ -58,7 +59,19 @@ class TxnProcessor
 
     static void* StartScheduler(void* arg);
 
+	// putting calvin sequencer as public for pthread
+	void RunCalvinSequencer();
+
    private:
+	// thread for calvin sequencer
+	pthread_t calvin_sequencer_thread;
+	// defining epoch for ease of use
+	typedef std::queue<Txn*> Epoch;
+	// queue of epochs for calvin scheduler
+	AtomicQueue<Epoch*> epoch_queue;
+	// helper function to call calvin sequencer in pthread
+	static void* calvin_seqeuencer_helper(void *arg);
+
     // Serial validation
     bool SerialValidate(Txn* txn);
 
