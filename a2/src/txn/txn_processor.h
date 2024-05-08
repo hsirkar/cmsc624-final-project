@@ -41,11 +41,6 @@ struct CalvinLock {
   std::unordered_set<Txn *> holders;
 };
 
-struct CalvinLock {
-  LockMode status;
-  std::unordered_set<Txn *> holders;
-};
-
 // Returns a human-readable string naming of the providing mode.
 string ModeToString(CCMode mode);
 
