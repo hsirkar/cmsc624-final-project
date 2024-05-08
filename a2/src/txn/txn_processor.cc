@@ -1,8 +1,8 @@
 #include "txn_processor.h"
+#include <chrono>
 #include <set>
 #include <stdio.h>
 #include <unordered_set>
-#include <chrono>
 
 #include "lock_manager.h"
 
@@ -272,34 +272,26 @@ void *TxnProcessor::calvin_sequencer_helper(void *arg) {
   return NULL;
 }
 
-// RIGHT NOW THIS IS A COPY OF TXNPROCESSOR::EXECUTETXN
 void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
-  // Get the current commited transaction index for the further validation.
-  txn->occ_start_idx_ = committed_txns_.Size();
+  // Execute txn.
+  ExecuteTxn(txn);
 
-  // Read everything in from readset.
-  for (set<Key>::iterator it = txn->readset_.begin(); it != txn->readset_.end();
-       ++it) {
-    // Save each read result iff record exists in storage.
-    Value result;
-    if (storage_->Read(*it, &result))
-      txn->reads_[*it] = result;
+  // Commit/abort txn according to program logic's commit/abort decision.
+  // Note: we do this within the worker thread instead of returning
+  // back to the scheduler thread.
+  if (txn->Status() == COMPLETED_C) {
+    ApplyWrites(txn);
+    committed_txns_.Push(txn);
+    txn->status_ = COMMITTED;
+  } else if (txn->Status() == COMPLETED_A) {
+    txn->status_ = ABORTED;
+  } else {
+    // Invalid TxnStatus!
+    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
   }
 
-  // Also read everything in from writeset.
-  for (set<Key>::iterator it = txn->writeset_.begin();
-       it != txn->writeset_.end(); ++it) {
-    // Save each read result iff record exists in storage.
-    Value result;
-    if (storage_->Read(*it, &result))
-      txn->reads_[*it] = result;
-  }
-
-  // Execute txn's program logic.
-  txn->Run();
-
-  // Hand the txn back to the RunScheduler thread.
-  completed_txns_.Push(txn);
+  // Return result to client.
+  txn_results_.Push(txn);
 }
 
 void TxnProcessor::RunCalvinScheduler() {
@@ -322,7 +314,7 @@ void TxnProcessor::RunCalvinScheduler() {
       // an execution thread that executes the txn logic *and also* does the
       // validation and write phases.
       if (txn_requests_.Pop(&txn)) {
-        tp_.AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
+        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
       }
     }
   }
