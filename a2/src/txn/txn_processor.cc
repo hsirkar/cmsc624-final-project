@@ -3,6 +3,7 @@
 #include <set>
 #include <stdio.h>
 #include <unordered_set>
+#include "utils/common.h"
 
 #include "lock_manager.h"
 
@@ -301,12 +302,62 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
 void TxnProcessor::RunCalvinScheduler() {
   Txn *txn;
 
+  std::unordered_map<Key, std::unordered_set<Txn*>> shared_holders;
+  std::unordered_map<Key, Txn*> last_excl;
+
+  std::unordered_map<Txn*, std::unordered_set<Txn*>> adj;
+  std::unordered_map<Txn*, int> indegree;
+
   while (!stopped_) {
     // Get the next new transaction request (if one is pending) and pass it to
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      // ...
+      adj[txn] = std::unordered_set<Txn*>();
+      indegree[txn] = 0;
+
+      // Loop through readset
+      for (const Key &key : txn->readset_) {
+        // Create a new entry for the key if it doesn't exist
+        shared_holders.emplace(key, std::unordered_set<Txn*>());
+        shared_holders[key].insert(txn);
+
+        // Create a new entry for the key if it doesn't exist
+        last_excl.emplace(key, nullptr);
+
+        // If the last_excl txn is not the current txn, add an edge
+        if (last_excl[key] != nullptr && last_excl[key] != txn && !adj[last_excl[key]].contains(txn)) {
+          adj[last_excl[key]].insert(txn);
+          indegree[txn]++;
+        }
+      }
+
+      // Loop through writeset
+      for (const Key &key : txn->writeset_) {
+        // Create a new entry for the key if it doesn't exist
+        shared_holders.emplace(key, std::unordered_set<Txn*>());
+
+        for (auto conflicting_txn : shared_holders[key]) {
+          if (conflicting_txn != txn && !adj[conflicting_txn].contains(txn)) {
+            adj[conflicting_txn].insert(txn);
+            indegree[txn]++;
+          }
+        }
+
+        // No shared holders
+        shared_holders[key].clear();
+
+        // Create a new entry for the key if it doesn't exist
+        last_excl[key] = txn;
+      }
+    }
+
+    // Enqueue the 0-indegree nodes (these are txns without dependencies)
+    for (auto &[txn, degree] : indegree) {
+      if (degree == 0) {
+        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
+        indegree.erase(txn);
+      }
     }
   }
 }
