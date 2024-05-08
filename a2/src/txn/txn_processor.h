@@ -33,6 +33,7 @@ enum CCMode {
   MVCC = 5,                   // Part 4
   MVCC_SSI = 6,               // Part 5
   CALVIN = 7,
+  CALVIN_EPOCH = 8,
 };
 
 struct CalvinLock {
