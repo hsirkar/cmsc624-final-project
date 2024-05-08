@@ -104,7 +104,11 @@ void TxnProcessor::RunScheduler() {
     break;
   case MVCC:
     RunMVCCScheduler();
+    break;
   case CALVIN:
+    RunCalvinScheduler();
+    break;
+  case CALVIN_EPOCH:
     pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
                    reinterpret_cast<void *>(this));
     RunCalvinScheduler();
@@ -295,13 +299,11 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
 }
 
 void TxnProcessor::RunCalvinScheduler() {
-  bool use_epochs = true;
-
   Txn *txn;
   Epoch *curr_epoch;
 
   while (!stopped_) {
-    if (use_epochs) {
+    if (_mode == CALVIN_EPOCH) {
       // Get the next epoch
       // Execute all transactions in the epoch
       if (epoch_queue.Pop(&curr_epoch)) {
