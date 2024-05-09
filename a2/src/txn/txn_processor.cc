@@ -10,7 +10,15 @@
 #define THREAD_COUNT 8
 
 TxnProcessor::TxnProcessor(CCMode mode)
-    : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
+    : mode_(mode), next_unique_id_(1) {
+  // Create the thread pool
+  if (mode_ == CALVIN || mode == CALVIN_EPOCH) {
+    tp_ = new CalvinThreadPool(THREAD_COUNT);
+  } else {
+    tp_ = new StaticThreadPool(THREAD_COUNT);
+  }
+
+  // Create the lock manager
   if (mode_ == LOCKING_EXCLUSIVE_ONLY)
     lm_ = new LockManagerA(&ready_txns_);
   else if (mode_ == LOCKING)
