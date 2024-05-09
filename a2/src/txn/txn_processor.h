@@ -83,8 +83,35 @@ private:
   // Calvin Scheduler Stuff
   std::unordered_map<Key, CalvinLock> lock_table;
   std::unordered_map<Txn *, std::unordered_set<Txn *>> adj;
-  std::unordered_map<Txn *, std::atomic<int>>
-      indegree; // indegree needs to be atomic
+  std::unordered_map<Txn *, std::atomic<int>> indegree; // indegree needs to be atomic
+  struct EpochDag{
+      std::unordered_map<Txn *, std::unordered_set<Txn *>> adjacency_matrix;
+      std::unordered_map<Txn *, std::atomic<int>> indegree;
+      std::queue<Txn*> root_txns;
+  } ;
+
+  EpochDag* current_epoch_dag;
+
+  AtomicQueue<EpochDag*> epoch_dag_queue;
+
+  //
+  void RunCalvinScheduler();
+  void RunCalvinEpochScheduler();
+
+  std::atomic<uint> num_txns_left_in_epoch;
+
+  pthread_cond_t epoch_finished_cond;
+  pthread_mutex_t epoch_finished_mutex;
+
+  void CalvinWaitForEpochEnd();
+
+  void CalvinSignalEpochEnd();
+
+  void CalvinEpochExecutor();
+
+  void AddCalvinTxnToTp(Txn* txn);
+
+  void ExecuteTxnCalvin(Txn *txn);
 
   // Serial validation
   bool SerialValidate(Txn *txn);
@@ -109,8 +136,6 @@ private:
 
   // MVCC SSI version of scheduler.
   void RunMVCCSSIScheduler();
-
-  void RunCalvinScheduler();
 
   // Performs all reads required to execute the transaction, then executes the
   // transaction logic.

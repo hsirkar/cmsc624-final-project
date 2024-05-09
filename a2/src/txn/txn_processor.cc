@@ -294,8 +294,24 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
     DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
   }
 
+  // update number of transactions left and signal if finished
+  CalvinSignalEpochEnd();
+
+  // update dag and add any ready
+  std::unordered_set<Txn*> adj_mat = current_epoch_dag->adjacency_matrix[txn];
+  for(Txn* blocked_txn: adj_mat) {
+    if(current_epoch_dag->indegree[blocked_txn] == 1) {
+      AddCalvinTxnToTp(blocked_txn);
+    }
+    current_epoch_dag->indegree[blocked_txn]--;
+  }
+
   // Return result to client.
   txn_results_.Push(txn);
+}
+
+void TxnProcessor::AddCalvinTxnToTp(Txn *txn) {
+  tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
 }
 
 void TxnProcessor::RunCalvinScheduler() {
@@ -320,6 +336,45 @@ void TxnProcessor::RunCalvinEpochScheduler() {
     if (epoch_queue.Pop(&curr_epoch)) {
       // ...
     }
+  }
+}
+
+void TxnProcessor::CalvinEpochExecutor() {
+  EpochDag* current_epoch;
+  while (!stopped_) {
+    if(epoch_dag_queue.Pop(&current_epoch)) {
+      num_txns_left_in_epoch = current_epoch->adjacency_matrix.size();
+      Txn* txn;
+      std::queue<Txn*> root_txns = current_epoch->root_txns;
+
+      // add all root txns to threadpool
+      while(!root_txns.empty()) {
+        txn = root_txns.front();
+        root_txns.pop();
+        AddCalvinTxnToTp(txn);
+      }
+
+      // wait for epoch to end executing
+      CalvinWaitForEpochEnd();
+    }
+  }
+
+}
+
+void TxnProcessor::CalvinWaitForEpochEnd() {
+  pthread_mutex_lock(&epoch_finished_mutex);
+  while(num_txns_left_in_epoch > 0) {
+    pthread_cond_wait(&epoch_finished_cond, &epoch_finished_mutex);
+  }
+  pthread_mutex_unlock(&epoch_finished_mutex);
+}
+
+void TxnProcessor::CalvinSignalEpochEnd() {
+  if(num_txns_left_in_epoch == 1){
+    num_txns_left_in_epoch = 0;
+    pthread_cond_signal(&epoch_finished_cond);
+  } else {
+    num_txns_left_in_epoch--;
   }
 }
 
