@@ -85,9 +85,9 @@ private:
   std::unordered_map<Txn *, std::unordered_set<Txn *>> adj;
   std::unordered_map<Txn *, std::atomic<int>> indegree; // indegree needs to be atomic
   struct EpochDag{
-      std::unordered_map<Txn *, std::unordered_set<Txn *>> adjacency_matrix;
-      std::unordered_map<Txn *, std::atomic<int>> indegree;
-      std::queue<Txn*> root_txns;
+      std::unordered_map<Txn *, std::unordered_set<Txn *>>* adjacency_matrix;
+      std::unordered_map<Txn *, std::atomic<int>>* indegree;
+      std::queue<Txn*>* root_txns;
   } ;
 
   EpochDag* current_epoch_dag;
