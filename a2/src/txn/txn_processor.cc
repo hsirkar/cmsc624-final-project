@@ -1,9 +1,9 @@
 #include "txn_processor.h"
+#include "utils/common.h"
 #include <chrono>
 #include <set>
 #include <stdio.h>
 #include <unordered_set>
-#include "utils/common.h"
 
 #include "lock_manager.h"
 
@@ -302,24 +302,25 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
 void TxnProcessor::RunCalvinScheduler() {
   Txn *txn;
 
-  std::unordered_map<Key, std::unordered_set<Txn*>> shared_holders;
-  std::unordered_map<Key, Txn*> last_excl;
+  std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
+  std::unordered_map<Key, Txn *> last_excl;
 
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
-      adj[txn] = std::unordered_set<Txn*>();
+      adj[txn] = std::unordered_set<Txn *>();
       indegree[txn] = 0;
 
       // Loop through readset
       for (const Key &key : txn->readset_) {
         // Add to shared holders
         if (!shared_holders.contains(key)) {
-          shared_holders[key] = std::unordered_set<Txn*>();
+          shared_holders[key] = std::unordered_set<Txn *>();
         }
         shared_holders[key].insert(txn);
 
         // If the last_excl txn is not the current txn, add an edge
-        if (last_excl.contains(key) && last_excl[key] != txn && !adj[last_excl[key]].contains(txn)) {
+        if (last_excl.contains(key) && last_excl[key] != txn &&
+            !adj[last_excl[key]].contains(txn)) {
           adj[last_excl[key]].insert(txn);
           indegree[txn]++;
         }
@@ -327,20 +328,17 @@ void TxnProcessor::RunCalvinScheduler() {
 
       // Loop through writeset
       for (const Key &key : txn->writeset_) {
-        // Create a new entry for the key if it doesn't exist
-        if (!shared_holders.contains(key)) {
-          shared_holders[key] = std::unordered_set<Txn*>();
-        }
-
         // Add an edge between the current txn and all shared holders
-        for (auto conflicting_txn : shared_holders[key]) {
-          if (conflicting_txn != txn && !adj[conflicting_txn].contains(txn)) {
-            adj[conflicting_txn].insert(txn);
-            indegree[txn]++;
+        if (shared_holders.contains(key)) {
+          for (auto conflicting_txn : shared_holders[key]) {
+            if (conflicting_txn != txn && !adj[conflicting_txn].contains(txn)) {
+              adj[conflicting_txn].insert(txn);
+              indegree[txn]++;
+            }
           }
+          shared_holders[key].clear();
         }
 
-        shared_holders[key].clear();
         last_excl[key] = txn;
       }
     }
