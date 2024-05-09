@@ -9,8 +9,7 @@
 // Thread & queue counts for StaticThreadPool initialization.
 #define THREAD_COUNT 8
 
-TxnProcessor::TxnProcessor(CCMode mode)
-    : mode_(mode), next_unique_id_(1) {
+TxnProcessor::TxnProcessor(CCMode mode) : mode_(mode), next_unique_id_(1) {
   // Create the thread pool
   if (mode_ == CALVIN || mode == CALVIN_EPOCH) {
     tp_ = new CalvinThreadPool(THREAD_COUNT);
@@ -216,7 +215,7 @@ void TxnProcessor::RunLockingScheduler() {
       ready_txns_.pop_front();
 
       // Start txn running in its own thread.
-      tp_.AddTask([this, txn]() { this->ExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxn(txn); });
     }
   }
 }
@@ -345,7 +344,7 @@ void TxnProcessor::RunOCCScheduler() {
     // Get the next new txn request (if one is pending)
     if (txn_requests_.Pop(&txn)) {
       // Pass it to an execution thread
-      tp_.AddTask([this, txn]() { this->ExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxn(txn); });
     }
 
     // Dealing with a finished transaction
@@ -532,7 +531,7 @@ void TxnProcessor::RunOCCParallelScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
     }
   }
 }
@@ -630,7 +629,7 @@ void TxnProcessor::RunMVCCScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->MVCCExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->MVCCExecuteTxn(txn); });
     }
   }
 }
@@ -723,7 +722,7 @@ void TxnProcessor::RunMVCCSSIScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->MVCCSSIExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->MVCCSSIExecuteTxn(txn); });
     }
   }
 }

@@ -13,9 +13,11 @@
 #include "storage.h"
 #include "txn.h"
 #include "utils/atomic.h"
+#include "utils/calvin_thread_pool.h"
 #include "utils/common.h"
 #include "utils/mutex.h"
 #include "utils/static_thread_pool.h"
+#include "utils/thread_pool.h"
 
 using std::deque;
 using std::map;
@@ -157,7 +159,7 @@ private:
   CCMode mode_;
 
   // Thread pool managing all threads used by TxnProcessor.
-  StaticThreadPool tp_;
+  ThreadPool *tp_;
 
   // Data storage used for all modes.
   Storage *storage_;

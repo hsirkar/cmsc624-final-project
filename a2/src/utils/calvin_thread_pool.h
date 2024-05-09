@@ -90,9 +90,9 @@ private:
         bool stolen = false;
         for (int i = 0; i < tp->thread_count_; i++) {
           if (i != queue_id && tp->queues_[i].PopNonBlocking(&task)) {
-            task();
+            task();   // Do the stolen task
             stolen = true;
-            sleep_duration = 1;
+            sleep_duration = 1; // Reset backoff.
             break;
           }
         }
