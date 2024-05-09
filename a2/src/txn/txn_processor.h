@@ -15,8 +15,6 @@
 #include "utils/atomic.h"
 #include "utils/common.h"
 #include "utils/mutex.h"
-#include "utils/thread_pool.h"
-#include "utils/calvin_thread_pool.h"
 #include "utils/static_thread_pool.h"
 
 using std::deque;
@@ -36,11 +34,6 @@ enum CCMode {
   MVCC_SSI = 6,               // Part 5
   CALVIN = 7,
   CALVIN_EPOCH = 8,
-};
-
-struct CalvinLock {
-  LockMode status;
-  std::unordered_set<Txn *> holders;
 };
 
 // Returns a human-readable string naming of the providing mode.
@@ -82,11 +75,34 @@ private:
   // helper function to call calvin sequencer in pthread
   static void *calvin_sequencer_helper(void *arg);
 
-  // Calvin Scheduler Stuff
-  std::unordered_map<Key, CalvinLock> lock_table;
-  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj;
+  // Calvin Continuous Scheduler
+  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
   std::unordered_map<Txn *, std::atomic<int>>
       indegree; // indegree needs to be atomic
+  std::queue<Txn *> *root_txns;
+
+  void ExecuteTxnCalvin(Txn *txn);
+  void RunCalvinScheduler();
+
+  // Calvin Epoch Scheduler
+  struct EpochDag {
+    std::unordered_map<Txn *, std::unordered_set<Txn *>> *adj_list;
+    std::unordered_map<Txn *, std::atomic<int>> *indegree;
+    std::queue<Txn *> *root_txns;
+  };
+
+  EpochDag *current_epoch_dag;
+  AtomicQueue<EpochDag *> epoch_dag_queue;
+
+  void ExecuteTxnCalvinEpoch(Txn *txn);
+  void RunCalvinEpochScheduler();
+
+  std::atomic<uint> num_txns_left_in_epoch;
+
+  pthread_cond_t epoch_finished_cond;
+  pthread_mutex_t epoch_finished_mutex;
+
+  void CalvinEpochExecutor();
 
   // Serial validation
   bool SerialValidate(Txn *txn);
@@ -111,8 +127,6 @@ private:
 
   // MVCC SSI version of scheduler.
   void RunMVCCSSIScheduler();
-
-  void RunCalvinScheduler();
 
   // Performs all reads required to execute the transaction, then executes the
   // transaction logic.
@@ -143,7 +157,7 @@ private:
   CCMode mode_;
 
   // Thread pool managing all threads used by TxnProcessor.
-  ThreadPool *tp_;
+  StaticThreadPool tp_;
 
   // Data storage used for all modes.
   Storage *storage_;
