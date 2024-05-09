@@ -330,6 +330,7 @@ void TxnProcessor::RunCalvinScheduler() {
 
         // If the last_excl txn is not the current txn, add an edge
         if (last_excl.contains(key) && last_excl[key] != txn &&
+            &&last_excl[key].status == INCOMPLETE &&
             !adj_list[last_excl[key]].contains(txn)) {
           adj_list[last_excl[key]].insert(txn);
           indegree[txn]++;
@@ -342,6 +343,7 @@ void TxnProcessor::RunCalvinScheduler() {
         if (shared_holders.contains(key)) {
           for (auto conflicting_txn : shared_holders[key]) {
             if (conflicting_txn != txn &&
+                conflicting_txn.status == INCOMPLETE &&
                 !adj_list[conflicting_txn].contains(txn)) {
               adj_list[conflicting_txn].insert(txn);
               indegree[txn]++;
