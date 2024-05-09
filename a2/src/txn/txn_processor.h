@@ -36,11 +36,6 @@ enum CCMode {
   CALVIN_EPOCH = 8,
 };
 
-struct CalvinLock {
-  LockMode status;
-  std::unordered_set<Txn *> holders;
-};
-
 // Returns a human-readable string naming of the providing mode.
 string ModeToString(CCMode mode);
 
@@ -80,23 +75,26 @@ private:
   // helper function to call calvin sequencer in pthread
   static void *calvin_sequencer_helper(void *arg);
 
-  // Calvin Scheduler Stuff
-  std::unordered_map<Key, CalvinLock> shared_holders;
+  // Calvin Continuous Scheduler
   std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
-  std::unordered_map<Txn *, std::atomic<int>> indegree; // indegree needs to be atomic
-  std::queue<Txn*>* root_txns;
+  std::unordered_map<Txn *, std::atomic<int>>
+      indegree; // indegree needs to be atomic
+  std::queue<Txn *> *root_txns;
 
-  struct EpochDag{
-      std::unordered_map<Txn *, std::unordered_set<Txn *>>* adj_list;
-      std::unordered_map<Txn *, std::atomic<int>>* indegree;
-      std::queue<Txn*>* root_txns;
+  void ExecuteTxnCalvin(Txn *txn);
+  void RunCalvinScheduler();
+
+  // Calvin Epoch Scheduler
+  struct EpochDag {
+    std::unordered_map<Txn *, std::unordered_set<Txn *>> *adj_list;
+    std::unordered_map<Txn *, std::atomic<int>> *indegree;
+    std::queue<Txn *> *root_txns;
   };
 
-  EpochDag* current_epoch_dag;
-  AtomicQueue<EpochDag*> epoch_dag_queue;
+  EpochDag *current_epoch_dag;
+  AtomicQueue<EpochDag *> epoch_dag_queue;
 
-  //
-  void RunCalvinScheduler();
+  void ExecuteTxnCalvinEpoch(Txn *txn);
   void RunCalvinEpochScheduler();
 
   std::atomic<uint> num_txns_left_in_epoch;
@@ -104,15 +102,7 @@ private:
   pthread_cond_t epoch_finished_cond;
   pthread_mutex_t epoch_finished_mutex;
 
-  void CalvinWaitForEpochEnd();
-
-  void CalvinSignalEpochEnd();
-
   void CalvinEpochExecutor();
-
-  void AddCalvinTxnToTp(Txn* txn);
-
-  void ExecuteTxnCalvin(Txn *txn);
 
   // Serial validation
   bool SerialValidate(Txn *txn);

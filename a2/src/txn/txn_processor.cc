@@ -302,16 +302,6 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
     num_txns_left_in_epoch--;
   }
 
-  // Update indegrees of neighbors
-  // If any has indegree 0, add them back to the queue
-  auto neighbors = current_epoch_dag->adj_list[0][txn];
-  for (auto blocked_txn : neighbors) {
-    current_epoch_dag->indegree[0][blocked_txn]--;
-    if (current_epoch_dag->indegree[0][blocked_txn] == 0) {
-      tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
-    }
-  }
-
   // Return result to client.
   txn_results_.Push(txn);
 }
@@ -327,6 +317,46 @@ void TxnProcessor::RunCalvinScheduler() {
       // ...
     }
   }
+}
+
+void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
+  // Execute txn.
+  ExecuteTxn(txn);
+
+  // Commit/abort txn according to program logic's commit/abort decision.
+  // Note: we do this within the worker thread instead of returning
+  // back to the scheduler thread.
+  if (txn->Status() == COMPLETED_C) {
+    ApplyWrites(txn);
+    committed_txns_.Push(txn);
+    txn->status_ = COMMITTED;
+  } else if (txn->Status() == COMPLETED_A) {
+    txn->status_ = ABORTED;
+  } else {
+    // Invalid TxnStatus!
+    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+  }
+
+  // update number of transactions left and signal if finished
+  if (num_txns_left_in_epoch == 1) {
+    num_txns_left_in_epoch = 0;
+    pthread_cond_signal(&epoch_finished_cond);
+  } else {
+    num_txns_left_in_epoch--;
+  }
+
+  // Update indegrees of neighbors
+  // If any has indegree 0, add them back to the queue
+  auto neighbors = current_epoch_dag->adj_list[0][txn];
+  for (auto blocked_txn : neighbors) {
+    current_epoch_dag->indegree[0][blocked_txn]--;
+    if (current_epoch_dag->indegree[0][blocked_txn] == 0) {
+      tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+    }
+  }
+
+  // Return result to client.
+  txn_results_.Push(txn);
 }
 
 void TxnProcessor::RunCalvinEpochScheduler() {
@@ -411,21 +441,17 @@ void TxnProcessor::CalvinEpochExecutor() {
       while (!root_txns->empty()) {
         txn = root_txns->front();
         root_txns->pop();
-        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
+        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
       }
 
       // wait for epoch to end executing
-      CalvinWaitForEpochEnd();
+      pthread_mutex_lock(&epoch_finished_mutex);
+      while (num_txns_left_in_epoch > 0) {
+        pthread_cond_wait(&epoch_finished_cond, &epoch_finished_mutex);
+      }
+      pthread_mutex_unlock(&epoch_finished_mutex);
     }
   }
-}
-
-void TxnProcessor::CalvinWaitForEpochEnd() {
-  pthread_mutex_lock(&epoch_finished_mutex);
-  while (num_txns_left_in_epoch > 0) {
-    pthread_cond_wait(&epoch_finished_cond, &epoch_finished_mutex);
-  }
-  pthread_mutex_unlock(&epoch_finished_mutex);
 }
 
 void TxnProcessor::ApplyWrites(Txn *txn) {
