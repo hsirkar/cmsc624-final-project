@@ -295,6 +295,16 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
     DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
   }
 
+  // Update indegrees of neighbors
+  // If any has indegree 0, add them back to the queue
+  auto neighbors = adj_list[txn];
+  for (auto nei : neighbors) {
+    indegree[nei]--;
+    if (indegree[nei] == 0) {
+      tp_.AddTask([this, nei]() { this->ExecuteTxnCalvin(nei); });
+    }
+  }
+
   // Return result to client.
   txn_results_.Push(txn);
 }

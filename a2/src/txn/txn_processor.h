@@ -36,11 +36,6 @@ enum CCMode {
   CALVIN_EPOCH = 8,
 };
 
-struct CalvinLock {
-  LockMode status;
-  std::unordered_set<Txn *> holders;
-};
-
 // Returns a human-readable string naming of the providing mode.
 string ModeToString(CCMode mode);
 
@@ -81,8 +76,10 @@ private:
   static void *calvin_sequencer_helper(void *arg);
 
   // Calvin Scheduler Stuff
-  std::unordered_map<Txn*, std::unordered_set<Txn*>> adj;
-  std::unordered_map<Txn*, std::atomic<int>> indegree;
+  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
+  std::unordered_map<Txn *, std::atomic<int>>
+      indegree; // indegree needs to be atomic
+  std::queue<Txn *> *root_txns;
 
   // Serial validation
   bool SerialValidate(Txn *txn);
