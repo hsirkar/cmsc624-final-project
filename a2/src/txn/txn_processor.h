@@ -81,17 +81,18 @@ private:
   static void *calvin_sequencer_helper(void *arg);
 
   // Calvin Scheduler Stuff
-  std::unordered_map<Key, CalvinLock> lock_table;
-  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj;
+  std::unordered_map<Key, CalvinLock> shared_holders;
+  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
   std::unordered_map<Txn *, std::atomic<int>> indegree; // indegree needs to be atomic
+  std::queue<Txn*>* root_txns;
+
   struct EpochDag{
-      std::unordered_map<Txn *, std::unordered_set<Txn *>>* adjacency_matrix;
+      std::unordered_map<Txn *, std::unordered_set<Txn *>>* adj_list;
       std::unordered_map<Txn *, std::atomic<int>>* indegree;
       std::queue<Txn*>* root_txns;
-  } ;
+  };
 
   EpochDag* current_epoch_dag;
-
   AtomicQueue<EpochDag*> epoch_dag_queue;
 
   //
