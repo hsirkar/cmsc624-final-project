@@ -306,24 +306,20 @@ void TxnProcessor::RunCalvinScheduler() {
   std::unordered_map<Key, Txn*> last_excl;
 
   while (!stopped_) {
-    // Get the next new transaction request (if one is pending) and pass it to
-    // an execution thread that executes the txn logic *and also* does the
-    // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
       adj[txn] = std::unordered_set<Txn*>();
       indegree[txn] = 0;
 
       // Loop through readset
       for (const Key &key : txn->readset_) {
-        // Create a new entry for the key if it doesn't exist
-        shared_holders.emplace(key, std::unordered_set<Txn*>());
+        // Add to shared holders
+        if (!shared_holders.contains(key)) {
+          shared_holders[key] = std::unordered_set<Txn*>();
+        }
         shared_holders[key].insert(txn);
 
-        // Create a new entry for the key if it doesn't exist
-        last_excl.emplace(key, nullptr);
-
         // If the last_excl txn is not the current txn, add an edge
-        if (last_excl[key] != nullptr && last_excl[key] != txn && !adj[last_excl[key]].contains(txn)) {
+        if (last_excl.contains(key) && last_excl[key] != txn && !adj[last_excl[key]].contains(txn)) {
           adj[last_excl[key]].insert(txn);
           indegree[txn]++;
         }
@@ -332,8 +328,11 @@ void TxnProcessor::RunCalvinScheduler() {
       // Loop through writeset
       for (const Key &key : txn->writeset_) {
         // Create a new entry for the key if it doesn't exist
-        shared_holders.emplace(key, std::unordered_set<Txn*>());
+        if (!shared_holders.contains(key)) {
+          shared_holders[key] = std::unordered_set<Txn*>();
+        }
 
+        // Add an edge between the current txn and all shared holders
         for (auto conflicting_txn : shared_holders[key]) {
           if (conflicting_txn != txn && !adj[conflicting_txn].contains(txn)) {
             adj[conflicting_txn].insert(txn);
@@ -341,10 +340,7 @@ void TxnProcessor::RunCalvinScheduler() {
           }
         }
 
-        // No shared holders
         shared_holders[key].clear();
-
-        // Create a new entry for the key if it doesn't exist
         last_excl[key] = txn;
       }
     }
