@@ -294,14 +294,6 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
     DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
   }
 
-  // update number of transactions left and signal if finished
-  if (num_txns_left_in_epoch == 1) {
-    num_txns_left_in_epoch = 0;
-    pthread_cond_signal(&epoch_finished_cond);
-  } else {
-    num_txns_left_in_epoch--;
-  }
-
   // Return result to client.
   txn_results_.Push(txn);
 }
