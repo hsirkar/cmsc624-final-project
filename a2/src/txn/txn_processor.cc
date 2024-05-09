@@ -317,7 +317,7 @@ void TxnProcessor::RunCalvinScheduler() {
 
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
-      adj[txn] = std::unordered_set<Txn *>();
+      adj_list[txn] = std::unordered_set<Txn *>();
       indegree[txn] = 0;
 
       // Loop through readset
@@ -330,8 +330,8 @@ void TxnProcessor::RunCalvinScheduler() {
 
         // If the last_excl txn is not the current txn, add an edge
         if (last_excl.contains(key) && last_excl[key] != txn &&
-            !adj[last_excl[key]].contains(txn)) {
-          adj[last_excl[key]].insert(txn);
+            !adj_list[last_excl[key]].contains(txn)) {
+          adj_list[last_excl[key]].insert(txn);
           indegree[txn]++;
         }
       }
@@ -341,8 +341,9 @@ void TxnProcessor::RunCalvinScheduler() {
         // Add an edge between the current txn and all shared holders
         if (shared_holders.contains(key)) {
           for (auto conflicting_txn : shared_holders[key]) {
-            if (conflicting_txn != txn && !adj[conflicting_txn].contains(txn)) {
-              adj[conflicting_txn].insert(txn);
+            if (conflicting_txn != txn &&
+                !adj_list[conflicting_txn].contains(txn)) {
+              adj_list[conflicting_txn].insert(txn);
               indegree[txn]++;
             }
           }
