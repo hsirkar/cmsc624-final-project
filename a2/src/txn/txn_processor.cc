@@ -336,12 +336,13 @@ void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
   }
 
   // update number of transactions left and signal if finished
-  if (num_txns_left_in_epoch == 1) {
-    num_txns_left_in_epoch = 0;
-    pthread_cond_signal(&epoch_finished_cond);
-  } else {
-    num_txns_left_in_epoch--;
-  }
+//  if (num_txns_left_in_epoch == 1) {
+//    num_txns_left_in_epoch = 0;
+////    pthread_cond_signal(&epoch_finished_cond);
+//  } else {
+//    num_txns_left_in_epoch--;
+//  }
+  num_txns_left_in_epoch--;
 
   // Update indegrees of neighbors
   // If any has indegree 0, add them back to the queue
@@ -358,12 +359,18 @@ void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
 }
 
 void TxnProcessor::RunCalvinEpochScheduler() {
+  // set up mutexes
+//  pthread_mutex_init(&epoch_finished_mutex, NULL);
+//  pthread_cond_init(&epoch_finished_cond, NULL);
+//  epoch_finished_mutex = PTHREAD_MUTEX_INITIALIZER;
+//  epoch_finished_cond = PTHREAD_COND_INITIALIZER;
   // Start Calvin Sequencer
   pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
                  reinterpret_cast<void *>(this));
   // Start Calvin Epoch Executor
   pthread_create(&calvin_epoch_executor_thread, NULL, calvin_epoch_executor_helper,
                  reinterpret_cast<void *>(this));
+
 
 
   Epoch *curr_epoch;
@@ -375,7 +382,7 @@ void TxnProcessor::RunCalvinEpochScheduler() {
       std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
       std::unordered_map<Key, Txn *> last_excl;
 
-      auto dag = (EpochDag *)malloc(sizeof(EpochDag));
+      dag = (EpochDag *)malloc(sizeof(EpochDag));
 
       std::unordered_map<Txn *, std::unordered_set<Txn *>>* adj_list = new std::unordered_map<Txn *, std::unordered_set<Txn *>>();
       std::unordered_map<Txn *, std::atomic<int>>* indegree = new std::unordered_map<Txn *, std::atomic<int>>();
@@ -385,7 +392,8 @@ void TxnProcessor::RunCalvinEpochScheduler() {
       while (!curr_epoch->empty()) {
         txn = curr_epoch->front();
         curr_epoch->pop();
-        // adj_list->insert()
+        adj_list->emplace(txn, std::unordered_set<Txn *>());
+        indegree->emplace(txn, 0);
 
         // Loop through readset
         for (const Key &key : txn->readset_) {
@@ -451,11 +459,13 @@ void TxnProcessor::CalvinEpochExecutor() {
       }
 
       // wait for epoch to end executing
-      pthread_mutex_lock(&epoch_finished_mutex);
+      int sleep_duration = 1; // in microseconds
       while (num_txns_left_in_epoch > 0) {
-        pthread_cond_wait(&epoch_finished_cond, &epoch_finished_mutex);
+        usleep(sleep_duration);
+        // Back off exponentially.
+        if (sleep_duration < 32)
+          sleep_duration *= 2;
       }
-      pthread_mutex_unlock(&epoch_finished_mutex);
     }
   }
 }
