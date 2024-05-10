@@ -64,6 +64,15 @@ TxnProcessor::~TxnProcessor() {
     delete lm_;
 
   delete storage_;
+
+  // Deallocate EVERYTHING in adj_list and indegree
+  if (mode_ == CALVIN) {
+    for (auto it = adj_list.begin(); it != adj_list.end(); it++) {
+      delete it->second;
+    }
+    adj_list.clear();
+    indegree.clear();
+  }
 }
 
 void TxnProcessor::NewTxnRequest(Txn *txn) {
@@ -78,7 +87,9 @@ void TxnProcessor::NewTxnRequest(Txn *txn) {
 
 Txn *TxnProcessor::GetTxnResult() {
   Txn *txn;
+  // std::cout << "Now waiting for txns!" << std::endl;
   while (!txn_results_.Pop(&txn)) {
+    // std::cout << "lol waiting" << std::endl;
     // No result yet. Wait a bit before trying again (to reduce contention on
     // atomic queues).
     usleep(1);
@@ -278,6 +289,7 @@ void *TxnProcessor::calvin_sequencer_helper(void *arg) {
 }
 
 void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
+  // std::cout << "Executing Txn " << txn->unique_id_ << std::endl;
   // Execute txn.
   ExecuteTxn(txn);
 
@@ -297,6 +309,7 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
 
   // Update indegrees of neighbors
   // If any has indegree 0, add them back to the queue
+  // if (adj_list.find(txn) != adj_list.end()) {
   auto neighbors = adj_list[txn];
   for (auto nei : neighbors) {
     indegree[nei]--;
@@ -304,6 +317,7 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
       tp_.AddTask([this, nei]() { this->ExecuteTxnCalvin(nei); });
     }
   }
+  // }
 
   // Return result to client.
   txn_results_.Push(txn);
@@ -318,6 +332,8 @@ void TxnProcessor::RunCalvinScheduler() {
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
       adj_list[txn] = std::unordered_set<Txn *>();
+
+      // Print the adj_list in one go so the lines aren't interleaved
 
       // Don't add to indegree hashmap right away because if indegree == 0,
       // we want to add it to the threadpool right away
@@ -360,7 +376,7 @@ void TxnProcessor::RunCalvinScheduler() {
 
       // If current transaction's indegree is 0, add it to the threadpool
       if (ind == 0) {
-        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
       } else {
         // Otherwise, add it to the indegree hashmap
         indegree[txn] = ind;
