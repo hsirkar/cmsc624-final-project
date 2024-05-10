@@ -57,7 +57,10 @@ TxnProcessor::~TxnProcessor() {
   // its thread pool.
   stopped_ = true;
   pthread_join(scheduler_thread_, NULL);
-  pthread_join(calvin_sequencer_thread, NULL);
+  if(calvin_epoch_executor_thread != NULL)
+    pthread_join(calvin_epoch_executor_thread, NULL);
+  if(calvin_sequencer_thread != NULL)
+    pthread_join(calvin_sequencer_thread, NULL);
 
   if (mode_ == LOCKING_EXCLUSIVE_ONLY || mode_ == LOCKING)
     delete lm_;
@@ -109,8 +112,6 @@ void TxnProcessor::RunScheduler() {
     RunCalvinScheduler();
     break;
   case CALVIN_EPOCH:
-    pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
-                   reinterpret_cast<void *>(this));
     RunCalvinEpochScheduler();
   }
 }
@@ -276,6 +277,11 @@ void *TxnProcessor::calvin_sequencer_helper(void *arg) {
   return NULL;
 }
 
+void *TxnProcessor::calvin_epoch_executor_helper(void *arg) {
+  reinterpret_cast<TxnProcessor *>(arg)->CalvinEpochExecutor();
+  return NULL;
+}
+
 void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
   // Execute txn.
   ExecuteTxn(txn);
@@ -339,10 +345,10 @@ void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
 
   // Update indegrees of neighbors
   // If any has indegree 0, add them back to the queue
-  auto neighbors = current_epoch_dag->adj_list[0][txn];
+  auto neighbors = current_epoch_dag->adj_list->at(txn);
   for (auto blocked_txn : neighbors) {
-    current_epoch_dag->indegree[0][blocked_txn]--;
-    if (current_epoch_dag->indegree[0][blocked_txn] == 0) {
+    current_epoch_dag->indegree->at(blocked_txn)--;
+    if (current_epoch_dag->indegree->at(blocked_txn) == 0) {
       tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
     }
   }
@@ -352,6 +358,14 @@ void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
 }
 
 void TxnProcessor::RunCalvinEpochScheduler() {
+  // Start Calvin Sequencer
+  pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
+                 reinterpret_cast<void *>(this));
+  // Start Calvin Epoch Executor
+  pthread_create(&calvin_epoch_executor_thread, NULL, calvin_epoch_executor_helper,
+                 reinterpret_cast<void *>(this));
+
+
   Epoch *curr_epoch;
   EpochDag *dag;
   while (!stopped_) {
@@ -363,14 +377,15 @@ void TxnProcessor::RunCalvinEpochScheduler() {
 
       auto dag = (EpochDag *)malloc(sizeof(EpochDag));
 
-      std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
-      std::unordered_map<Txn *, std::atomic<int>> indegree;
-      std::queue<Txn *> root_txns;
+      std::unordered_map<Txn *, std::unordered_set<Txn *>>* adj_list = new std::unordered_map<Txn *, std::unordered_set<Txn *>>();
+      std::unordered_map<Txn *, std::atomic<int>>* indegree = new std::unordered_map<Txn *, std::atomic<int>>();
+      std::queue<Txn *>* root_txns = new std::queue<Txn *>();
 
       Txn *txn;
       while (!curr_epoch->empty()) {
         txn = curr_epoch->front();
         curr_epoch->pop();
+        // adj_list->insert()
 
         // Loop through readset
         for (const Key &key : txn->readset_) {
@@ -382,9 +397,9 @@ void TxnProcessor::RunCalvinEpochScheduler() {
 
           // If the last_excl txn is not the current txn, add an edge
           if (last_excl.contains(key) && last_excl[key] != txn &&
-              !adj_list[last_excl[key]].contains(txn)) {
-            adj_list[last_excl[key]].insert(txn);
-            indegree[txn]++;
+              !adj_list->at(last_excl[key]).contains(txn)) {
+            adj_list->at(last_excl[key]).insert(txn);
+            indegree->at(txn)++;
           }
         }
         // Loop through writeset
@@ -393,9 +408,9 @@ void TxnProcessor::RunCalvinEpochScheduler() {
           if (shared_holders.contains(key)) {
             for (auto conflicting_txn : shared_holders[key]) {
               if (conflicting_txn != txn &&
-                  !adj_list[conflicting_txn].contains(txn)) {
-                adj_list[conflicting_txn].insert(txn);
-                indegree[txn]++;
+                  !adj_list->at(conflicting_txn).contains(txn)) {
+                adj_list->at(conflicting_txn).insert(txn);
+                indegree->at(txn)++;
               }
             }
             shared_holders[key].clear();
@@ -404,14 +419,14 @@ void TxnProcessor::RunCalvinEpochScheduler() {
         }
 
         // set as root if indegree of 0
-        if (indegree[txn] == 0) {
-          root_txns.push(txn);
+        if (indegree->at(txn) == 0) {
+          root_txns->push(txn);
         }
       }
       // finalize new epoch dag
-      dag->adj_list = &adj_list;
-      dag->indegree = &indegree;
-      dag->root_txns = &root_txns;
+      dag->adj_list = adj_list;
+      dag->indegree = indegree;
+      dag->root_txns = root_txns;
 
       // push dag to queue for executor to read
       epoch_dag_queue.Push(dag);
@@ -423,6 +438,7 @@ void TxnProcessor::CalvinEpochExecutor() {
   EpochDag *current_epoch;
   while (!stopped_) {
     if (epoch_dag_queue.Pop(&current_epoch)) {
+      current_epoch_dag = current_epoch;
       num_txns_left_in_epoch = current_epoch->adj_list->size();
       Txn *txn;
       std::queue<Txn *> *root_txns = current_epoch->root_txns;

@@ -65,15 +65,25 @@ public:
   // putting calvin sequencer as public for pthread
   void RunCalvinSequencer();
 
+  // putting calvin epoch executor as public for pthread
+  void CalvinEpochExecutor();
+
+
 private:
   // thread for calvin sequencer
   pthread_t calvin_sequencer_thread;
+  // thread for calvin sequencer
+  pthread_t calvin_epoch_executor_thread;
   // defining epoch for ease of use
   typedef std::queue<Txn *> Epoch;
   // queue of epochs for calvin scheduler
   AtomicQueue<Epoch *> epoch_queue;
   // helper function to call calvin sequencer in pthread
   static void *calvin_sequencer_helper(void *arg);
+  // helper function to call calvin epoch executor in pthread
+  static void *calvin_epoch_executor_helper(void *arg);
+
+
 
   // Calvin Continuous Scheduler
   std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
@@ -102,7 +112,6 @@ private:
   pthread_cond_t epoch_finished_cond;
   pthread_mutex_t epoch_finished_mutex;
 
-  void CalvinEpochExecutor();
 
   // Serial validation
   bool SerialValidate(Txn *txn);
