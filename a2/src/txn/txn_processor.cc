@@ -318,7 +318,10 @@ void TxnProcessor::RunCalvinScheduler() {
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
       adj_list[txn] = std::unordered_set<Txn *>();
-      indegree[txn] = 0;
+
+      // Don't add to indegree hashmap right away because if indegree == 0,
+      // we want to add it to the threadpool right away
+      int ind = 0;
 
       // Loop through readset
       for (const Key &key : txn->readset_) {
@@ -330,10 +333,10 @@ void TxnProcessor::RunCalvinScheduler() {
 
         // If the last_excl txn is not the current txn, add an edge
         if (last_excl.contains(key) && last_excl[key] != txn &&
-            &&last_excl[key].status == INCOMPLETE &&
+            last_excl[key]->Status() == INCOMPLETE &&
             !adj_list[last_excl[key]].contains(txn)) {
           adj_list[last_excl[key]].insert(txn);
-          indegree[txn]++;
+          ind++;
         }
       }
 
@@ -343,10 +346,10 @@ void TxnProcessor::RunCalvinScheduler() {
         if (shared_holders.contains(key)) {
           for (auto conflicting_txn : shared_holders[key]) {
             if (conflicting_txn != txn &&
-                conflicting_txn.status == INCOMPLETE &&
+                conflicting_txn->Status() == INCOMPLETE &&
                 !adj_list[conflicting_txn].contains(txn)) {
               adj_list[conflicting_txn].insert(txn);
-              indegree[txn]++;
+              ind++;
             }
           }
           shared_holders[key].clear();
@@ -354,13 +357,13 @@ void TxnProcessor::RunCalvinScheduler() {
 
         last_excl[key] = txn;
       }
-    }
 
-    // Enqueue the 0-indegree nodes (these are txns without dependencies)
-    for (auto &[txn, degree] : indegree) {
-      if (degree == 0) {
-        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
-        indegree.erase(txn);
+      // If current transaction's indegree is 0, add it to the threadpool
+      if (ind == 0) {
+        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+      } else {
+        // Otherwise, add it to the indegree hashmap
+        indegree[txn] = ind;
       }
     }
   }
