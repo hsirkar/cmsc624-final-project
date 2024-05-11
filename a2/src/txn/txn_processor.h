@@ -4,6 +4,8 @@
 #include <atomic>
 #include <deque>
 #include <map>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -81,7 +83,11 @@ private:
       indegree; // indegree needs to be atomic
   std::queue<Txn *> *root_txns;
 
-  void ExecuteTxnCalvin(Txn *txn);
+  std::shared_mutex adj_list_lock;
+  std::shared_mutex indegree_lock;
+
+  // Continuously run by each of the worker threads LMAO
+  void CalvinExecutorFunc();
   void RunCalvinScheduler();
 
   // Calvin Epoch Scheduler
@@ -174,6 +180,8 @@ private:
   // Does not need to be atomic because RunScheduler is the only thread that
   // will ever access this queue.
   deque<Txn *> ready_txns_;
+
+  AtomicQueue<Txn *> calvin_ready_txns_;
 
   // Queue of completed (but not yet committed/aborted) transactions.
   AtomicQueue<Txn *> completed_txns_;

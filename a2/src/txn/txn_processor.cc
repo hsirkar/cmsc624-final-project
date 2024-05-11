@@ -1,4 +1,5 @@
 #include "txn_processor.h"
+#include "utils/common.h"
 #include <chrono>
 #include <set>
 #include <stdio.h>
@@ -45,6 +46,13 @@ TxnProcessor::TxnProcessor(CCMode mode)
 
   stopped_ = false;
   scheduler_thread_ = scheduler_;
+
+  // Start CalvinExecutorFunc in all the threads
+  if (mode_ == CALVIN) {
+    for (int i = 0; i < THREAD_COUNT; i++) {
+      tp_.AddTask([this]() { this->CalvinExecutorFunc(); });
+    }
+  }
 }
 
 void *TxnProcessor::StartScheduler(void *arg) {
@@ -63,6 +71,12 @@ TxnProcessor::~TxnProcessor() {
     delete lm_;
 
   delete storage_;
+
+  // Deallocate EVERYTHING in adj_list and indegree
+  if (mode_ == CALVIN) {
+    adj_list.clear();
+    indegree.clear();
+  }
 }
 
 void TxnProcessor::NewTxnRequest(Txn *txn) {
@@ -276,37 +290,113 @@ void *TxnProcessor::calvin_sequencer_helper(void *arg) {
   return NULL;
 }
 
-void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
-  // Execute txn.
-  ExecuteTxn(txn);
+void TxnProcessor::CalvinExecutorFunc() {
+  Txn *txn;
+  while (!stopped_) {
+    if (calvin_ready_txns_.Pop(&txn)) {
+      // Execute txn.
+      ExecuteTxn(txn);
 
-  // Commit/abort txn according to program logic's commit/abort decision.
-  // Note: we do this within the worker thread instead of returning
-  // back to the scheduler thread.
-  if (txn->Status() == COMPLETED_C) {
-    ApplyWrites(txn);
-    committed_txns_.Push(txn);
-    txn->status_ = COMMITTED;
-  } else if (txn->Status() == COMPLETED_A) {
-    txn->status_ = ABORTED;
-  } else {
-    // Invalid TxnStatus!
-    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+      // Commit/abort txn according to program logic's commit/abort decision.
+      // Note: we do this within the worker thread instead of returning
+      // back to the scheduler thread.
+      if (txn->Status() == COMPLETED_C) {
+        ApplyWrites(txn);
+        committed_txns_.Push(txn);
+        txn->status_ = COMMITTED;
+      } else if (txn->Status() == COMPLETED_A) {
+        txn->status_ = ABORTED;
+      } else {
+        // Invalid TxnStatus!
+        DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+      }
+
+      // Update indegrees of neighbors
+      // If any has indegree 0, add them back to the queue
+      // if (adj_list.find(txn) != adj_list.end()) {
+      std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
+      std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
+
+      auto neighbors = adj_list[txn];
+      for (auto nei : neighbors) {
+        indegree[nei]--;
+        if (indegree[nei] == 0) {
+          calvin_ready_txns_.Push(nei);
+        }
+      }
+
+      // Return result to client.
+      txn_results_.Push(txn);
+    }
   }
-
-  // Return result to client.
-  txn_results_.Push(txn);
 }
 
 void TxnProcessor::RunCalvinScheduler() {
   Txn *txn;
 
+  std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
+  std::unordered_map<Key, Txn *> last_excl;
+
   while (!stopped_) {
-    // Get the next new transaction request (if one is pending) and pass it to
-    // an execution thread that executes the txn logic *and also* does the
-    // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      // ...
+      adj_list_lock.lock();
+      adj_list[txn] = {};
+      adj_list_lock.unlock();
+
+      adj_list_lock.lock();
+      indegree_lock.lock();
+
+      // Print the adj_list in one go so the lines aren't interleaved
+
+      // Don't add to indegree hashmap right away because if indegree == 0,
+      // we want to add it to the threadpool right away
+      int ind = 0;
+
+      // Loop through readset
+      for (const Key &key : txn->readset_) {
+        // Add to shared holders
+        if (!shared_holders.contains(key)) {
+          shared_holders[key] = {};
+        }
+        shared_holders[key].insert(txn);
+
+        // If the last_excl txn is not the current txn, add an edge
+        if (last_excl.contains(key) && last_excl[key] != txn &&
+            last_excl[key]->Status() == INCOMPLETE &&
+            !adj_list[last_excl[key]].contains(txn)) {
+          adj_list[last_excl[key]].insert(txn);
+          ind++;
+        }
+      }
+
+      // Loop through writeset
+      for (const Key &key : txn->writeset_) {
+        // Add an edge between the current txn and all shared holders
+        if (shared_holders.contains(key)) {
+          for (auto conflicting_txn : shared_holders[key]) {
+            if (conflicting_txn != txn &&
+                conflicting_txn->Status() == INCOMPLETE &&
+                !adj_list[conflicting_txn].contains(txn)) {
+              adj_list[conflicting_txn].insert(txn);
+              ind++;
+            }
+          }
+          shared_holders[key].clear();
+        }
+
+        last_excl[key] = txn;
+      }
+
+      // If current transaction's indegree is 0, add it to the threadpool
+      if (ind == 0) {
+        // tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
+        calvin_ready_txns_.Push(txn);
+      } else {
+        // Otherwise, add it to the indegree hashmap
+        indegree[txn] = ind;
+      }
+      indegree_lock.unlock();
+      adj_list_lock.unlock();
     }
   }
 }
