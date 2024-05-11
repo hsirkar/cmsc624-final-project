@@ -138,8 +138,10 @@ void Benchmark(const vector<LoadGen *> &lg) {
   deque<Txn *> doneTxns;
 
   // For each MODE...
-  for (CCMode mode = CALVIN_EPOCH; mode <= CALVIN_EPOCH;
+  for (CCMode mode = SERIAL; mode <= CALVIN_EPOCH;
        mode = static_cast<CCMode>(mode + 1)) {
+    if(mode == MVCC || mode == MVCC_SSI || mode == CALVIN)
+      continue;
     // Print out mode name.
     cout << ModeToString(mode) << flush;
 
@@ -210,133 +212,133 @@ int main(int argc, char **argv) {
 
   vector<LoadGen *> lg;
 
-//  cout << "\t\t            Low contention Read only (5 records)" << endl;
-//  cout << "\t\t----------------------------------------------------------------"
-//          "---"
-//       << endl;
-//  lg.push_back(new RMWLoadGen(1000000, 5, 0, 0.0001));
-//  lg.push_back(new RMWLoadGen(1000000, 5, 0, 0.001));
-//  lg.push_back(new RMWLoadGen(1000000, 5, 0, 0.01));
-//  lg.push_back(new RMWDynLoadGen(1000000, 5, 0, {0.0001, 0.001, 0.01}));
-//
-//  Benchmark(lg);
-//  cout << endl;
-//
-//  for (uint32 i = 0; i < lg.size(); i++)
-//    delete lg[i];
-//  lg.clear();
-//
-//  cout << "\t\t            Low contention Read only (30 records)" << endl;
-//  cout << "\t\t----------------------------------------------------------------"
-//          "---"
-//       << endl;
-//  lg.push_back(new RMWLoadGen(1000000, 30, 0, 0.0001));
-//  lg.push_back(new RMWLoadGen(1000000, 30, 0, 0.001));
-//  lg.push_back(new RMWLoadGen(1000000, 30, 0, 0.01));
-//  lg.push_back(new RMWDynLoadGen(1000000, 30, 0, {0.0001, 0.001, 0.01}));
-//
-//  Benchmark(lg);
-//  cout << endl;
-//
-//  for (uint32 i = 0; i < lg.size(); i++)
-//    delete lg[i];
-//  lg.clear();
-//
-//  cout << "\t\t            High contention Read only (5 records)" << endl;
-//  cout << "\t\t----------------------------------------------------------------"
-//          "---"
-//       << endl;
-//  lg.push_back(new RMWLoadGen(100, 5, 0, 0.0001));
-//  lg.push_back(new RMWLoadGen(100, 5, 0, 0.001));
-//  lg.push_back(new RMWLoadGen(100, 5, 0, 0.01));
-//  lg.push_back(new RMWDynLoadGen(100, 5, 0, {0.0001, 0.001, 0.01}));
-//
-//  Benchmark(lg);
-//  cout << endl;
-//
-//  for (uint32 i = 0; i < lg.size(); i++)
-//    delete lg[i];
-//  lg.clear();
-//
-//  cout << "\t\t            High contention Read only (30 records)" << endl;
-//  cout << "\t\t----------------------------------------------------------------"
-//          "---"
-//       << endl;
-//  lg.push_back(new RMWLoadGen(100, 30, 0, 0.0001));
-//  lg.push_back(new RMWLoadGen(100, 30, 0, 0.001));
-//  lg.push_back(new RMWLoadGen(100, 30, 0, 0.01));
-//  lg.push_back(new RMWDynLoadGen(100, 30, 0, {0.0001, 0.001, 0.01}));
-//
-//  Benchmark(lg);
-//  cout << endl;
-//
-//  for (uint32 i = 0; i < lg.size(); i++)
-//    delete lg[i];
-//  lg.clear();
-//
-//  cout << "\t\t            Low contention read-write (5 records)" << endl;
-//  cout << "\t\t----------------------------------------------------------------"
-//          "---"
-//       << endl;
-//  lg.push_back(new RMWLoadGen(1000000, 0, 5, 0.0001));
-//  lg.push_back(new RMWLoadGen(1000000, 0, 5, 0.001));
-//  lg.push_back(new RMWLoadGen(1000000, 0, 5, 0.01));
-//  lg.push_back(new RMWDynLoadGen(1000000, 0, 5, {0.0001, 0.001, 0.01}));
-//
-//  Benchmark(lg);
-//  cout << endl;
-//
-//  for (uint32 i = 0; i < lg.size(); i++)
-//    delete lg[i];
-//  lg.clear();
-//
-//  cout << "\t\t            Low contention read-write (10 records)" << endl;
-//  cout << "\t\t----------------------------------------------------------------"
-//          "---"
-//       << endl;
-//  lg.push_back(new RMWLoadGen(1000000, 0, 10, 0.0001));
-//  lg.push_back(new RMWLoadGen(1000000, 0, 10, 0.001));
-//  lg.push_back(new RMWLoadGen(1000000, 0, 10, 0.01));
-//  lg.push_back(new RMWDynLoadGen(1000000, 0, 10, {0.0001, 0.001, 0.01}));
-//
-//  Benchmark(lg);
-//  cout << endl;
-//
-//  for (uint32 i = 0; i < lg.size(); i++)
-//    delete lg[i];
-//  lg.clear();
-//
-//  cout << "\t\t            High contention read-write (5 records)" << endl;
-//  cout << "\t\t----------------------------------------------------------------"
-//          "---"
-//       << endl;
-//  lg.push_back(new RMWLoadGen(100, 0, 5, 0.0001));
-//  lg.push_back(new RMWLoadGen(100, 0, 5, 0.001));
-//  lg.push_back(new RMWLoadGen(100, 0, 5, 0.01));
-//  lg.push_back(new RMWDynLoadGen(100, 0, 5, {0.0001, 0.001, 0.01}));
-//
-//  Benchmark(lg);
-//  cout << endl;
-//
-//  for (uint32 i = 0; i < lg.size(); i++)
-//    delete lg[i];
-//  lg.clear();
-//
-//  cout << "\t\t            High contention read-write (10 records)" << endl;
-//  cout << "\t\t----------------------------------------------------------------"
-//          "---"
-//       << endl;
-//  lg.push_back(new RMWLoadGen(100, 0, 10, 0.0001));
-//  lg.push_back(new RMWLoadGen(100, 0, 10, 0.001));
-//  lg.push_back(new RMWLoadGen(100, 0, 10, 0.01));
-//  lg.push_back(new RMWDynLoadGen(100, 0, 10, {0.0001, 0.001, 0.01}));
-//
-//  Benchmark(lg);
-//  cout << endl;
-//
-//  for (uint32 i = 0; i < lg.size(); i++)
-//    delete lg[i];
-//  lg.clear();
+  cout << "\t\t            Low contention Read only (5 records)" << endl;
+  cout << "\t\t----------------------------------------------------------------"
+          "---"
+       << endl;
+  lg.push_back(new RMWLoadGen(1000000, 5, 0, 0.0001));
+  lg.push_back(new RMWLoadGen(1000000, 5, 0, 0.001));
+  lg.push_back(new RMWLoadGen(1000000, 5, 0, 0.01));
+  lg.push_back(new RMWDynLoadGen(1000000, 5, 0, {0.0001, 0.001, 0.01}));
+
+  Benchmark(lg);
+  cout << endl;
+
+  for (uint32 i = 0; i < lg.size(); i++)
+    delete lg[i];
+  lg.clear();
+
+  cout << "\t\t            Low contention Read only (30 records)" << endl;
+  cout << "\t\t----------------------------------------------------------------"
+          "---"
+       << endl;
+  lg.push_back(new RMWLoadGen(1000000, 30, 0, 0.0001));
+  lg.push_back(new RMWLoadGen(1000000, 30, 0, 0.001));
+  lg.push_back(new RMWLoadGen(1000000, 30, 0, 0.01));
+  lg.push_back(new RMWDynLoadGen(1000000, 30, 0, {0.0001, 0.001, 0.01}));
+
+  Benchmark(lg);
+  cout << endl;
+
+  for (uint32 i = 0; i < lg.size(); i++)
+    delete lg[i];
+  lg.clear();
+
+  cout << "\t\t            High contention Read only (5 records)" << endl;
+  cout << "\t\t----------------------------------------------------------------"
+          "---"
+       << endl;
+  lg.push_back(new RMWLoadGen(100, 5, 0, 0.0001));
+  lg.push_back(new RMWLoadGen(100, 5, 0, 0.001));
+  lg.push_back(new RMWLoadGen(100, 5, 0, 0.01));
+  lg.push_back(new RMWDynLoadGen(100, 5, 0, {0.0001, 0.001, 0.01}));
+
+  Benchmark(lg);
+  cout << endl;
+
+  for (uint32 i = 0; i < lg.size(); i++)
+    delete lg[i];
+  lg.clear();
+
+  cout << "\t\t            High contention Read only (30 records)" << endl;
+  cout << "\t\t----------------------------------------------------------------"
+          "---"
+       << endl;
+  lg.push_back(new RMWLoadGen(100, 30, 0, 0.0001));
+  lg.push_back(new RMWLoadGen(100, 30, 0, 0.001));
+  lg.push_back(new RMWLoadGen(100, 30, 0, 0.01));
+  lg.push_back(new RMWDynLoadGen(100, 30, 0, {0.0001, 0.001, 0.01}));
+
+  Benchmark(lg);
+  cout << endl;
+
+  for (uint32 i = 0; i < lg.size(); i++)
+    delete lg[i];
+  lg.clear();
+
+  cout << "\t\t            Low contention read-write (5 records)" << endl;
+  cout << "\t\t----------------------------------------------------------------"
+          "---"
+       << endl;
+  lg.push_back(new RMWLoadGen(1000000, 0, 5, 0.0001));
+  lg.push_back(new RMWLoadGen(1000000, 0, 5, 0.001));
+  lg.push_back(new RMWLoadGen(1000000, 0, 5, 0.01));
+  lg.push_back(new RMWDynLoadGen(1000000, 0, 5, {0.0001, 0.001, 0.01}));
+
+  Benchmark(lg);
+  cout << endl;
+
+  for (uint32 i = 0; i < lg.size(); i++)
+    delete lg[i];
+  lg.clear();
+
+  cout << "\t\t            Low contention read-write (10 records)" << endl;
+  cout << "\t\t----------------------------------------------------------------"
+          "---"
+       << endl;
+  lg.push_back(new RMWLoadGen(1000000, 0, 10, 0.0001));
+  lg.push_back(new RMWLoadGen(1000000, 0, 10, 0.001));
+  lg.push_back(new RMWLoadGen(1000000, 0, 10, 0.01));
+  lg.push_back(new RMWDynLoadGen(1000000, 0, 10, {0.0001, 0.001, 0.01}));
+
+  Benchmark(lg);
+  cout << endl;
+
+  for (uint32 i = 0; i < lg.size(); i++)
+    delete lg[i];
+  lg.clear();
+
+  cout << "\t\t            High contention read-write (5 records)" << endl;
+  cout << "\t\t----------------------------------------------------------------"
+          "---"
+       << endl;
+  lg.push_back(new RMWLoadGen(100, 0, 5, 0.0001));
+  lg.push_back(new RMWLoadGen(100, 0, 5, 0.001));
+  lg.push_back(new RMWLoadGen(100, 0, 5, 0.01));
+  lg.push_back(new RMWDynLoadGen(100, 0, 5, {0.0001, 0.001, 0.01}));
+
+  Benchmark(lg);
+  cout << endl;
+
+  for (uint32 i = 0; i < lg.size(); i++)
+    delete lg[i];
+  lg.clear();
+
+  cout << "\t\t            High contention read-write (10 records)" << endl;
+  cout << "\t\t----------------------------------------------------------------"
+          "---"
+       << endl;
+  lg.push_back(new RMWLoadGen(100, 0, 10, 0.0001));
+  lg.push_back(new RMWLoadGen(100, 0, 10, 0.001));
+  lg.push_back(new RMWLoadGen(100, 0, 10, 0.01));
+  lg.push_back(new RMWDynLoadGen(100, 0, 10, {0.0001, 0.001, 0.01}));
+
+  Benchmark(lg);
+  cout << endl;
+
+  for (uint32 i = 0; i < lg.size(); i++)
+    delete lg[i];
+  lg.clear();
 
   // 80% of transactions are READ only transactions and run for the full
   // transaction duration. The rest are very fast (< 0.1ms), high-contention

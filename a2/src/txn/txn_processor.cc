@@ -318,15 +318,8 @@ void TxnProcessor::RunCalvinScheduler() {
 }
 
 void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
-  if(txn->Status() != INCOMPLETE) {
-    return;
-    // auto status = txn->Status();
-    // std::cout << "UH OH--------------------------------UH OH" << std::endl;
-  }
-  // Execute txn.
-  ExecuteTxn(txn);
 
-  auto curr_indegree = current_epoch_dag->indegree->at(txn);
+  ExecuteTxn(txn);
 
   // Commit/abort txn according to program logic's commit/abort decision.
   // Note: we do this within the worker thread instead of returning
@@ -342,27 +335,15 @@ void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
     DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
   }
 
-  // update number of transactions left and signal if finished
-//  if (num_txns_left_in_epoch == 1) {
-//    num_txns_left_in_epoch = 0;
-////    pthread_cond_signal(&epoch_finished_cond);
-//  } else {
-//    num_txns_left_in_epoch--;
-//  }
   num_txns_left_in_epoch--;
 
   // Update indegrees of neighbors
   // If any has indegree 0, add them back to the queue
   auto neighbors = current_epoch_dag->adj_list->at(txn);
-  for (auto blocked_txn : neighbors) {
-    pthread_mutex_lock(current_epoch_dag->indegree_locks->at(blocked_txn));
-    current_epoch_dag->indegree->at(blocked_txn)--;
-    int curr_indegree = current_epoch_dag->indegree->at(blocked_txn);
-    pthread_mutex_unlock(current_epoch_dag->indegree_locks->at(blocked_txn));
-    if (curr_indegree == 0) {
-      tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+  for (Txn* blocked_txn : neighbors) {
+    if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
+      tp_.AddTask([this, blocked_txn]() { this->ExecuteTxnCalvinEpoch(blocked_txn); });
     }
-//    current_epoch_dag->indegree->at(blocked_txn)--;
   }
 
   // Return result to client.
@@ -390,8 +371,8 @@ void TxnProcessor::RunCalvinEpochScheduler() {
       dag = (EpochDag *)malloc(sizeof(EpochDag));
 
       std::unordered_map<Txn *, std::unordered_set<Txn *>>* adj_list = new std::unordered_map<Txn *, std::unordered_set<Txn *>>();
-      std::unordered_map<Txn *, int>* indegree = new std::unordered_map<Txn *, int>();
-      std::unordered_map<Txn *, pthread_mutex_t*>* indegree_locks = new std::unordered_map<Txn *, pthread_mutex_t*>();
+      std::unordered_map<Txn *, std::atomic<int>>* indegree = new std::unordered_map<Txn *, std::atomic<int>>();
+//      std::unordered_map<Txn *, pthread_mutex_t*>* indegree_locks = new std::unordered_map<Txn *, pthread_mutex_t*>();
       std::queue<Txn *>* root_txns = new std::queue<Txn *>();
 
       Txn *txn;
@@ -400,9 +381,9 @@ void TxnProcessor::RunCalvinEpochScheduler() {
         curr_epoch->pop();
         adj_list->emplace(txn, std::unordered_set<Txn *>());
         indegree->emplace(txn, 0);
-        pthread_mutex_t* new_mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-        new_mutex[0] = PTHREAD_MUTEX_INITIALIZER;
-        indegree_locks->emplace(txn, new_mutex);
+//        pthread_mutex_t* new_mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+//        new_mutex[0] = PTHREAD_MUTEX_INITIALIZER;
+//        indegree_locks->emplace(txn, new_mutex);
 
         // Loop through readset
         for (const Key &key : txn->readset_) {
@@ -447,7 +428,7 @@ void TxnProcessor::RunCalvinEpochScheduler() {
       dag->adj_list = adj_list;
       dag->indegree = indegree;
       dag->root_txns = root_txns;
-      dag->indegree_locks = indegree_locks;
+//      dag->indegree_locks = indegree_locks;
 
       // push dag to queue for executor to read
       epoch_dag_queue.Push(dag);
