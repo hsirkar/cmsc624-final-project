@@ -356,7 +356,7 @@ void TxnProcessor::RunCalvinScheduler() {
       for (const Key &key : txn->readset_) {
         // Add to shared holders
         if (!shared_holders.contains(key)) {
-          shared_holders[key] = std::unordered_set<Txn *>();
+          shared_holders[key] = {};
         }
         shared_holders[key].insert(txn);
 
