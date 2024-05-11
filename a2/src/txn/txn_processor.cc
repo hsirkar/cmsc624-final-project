@@ -313,16 +313,16 @@ void TxnProcessor::CalvinExecutorFunc() {
 
       // Update indegrees of neighbors
       // If any has indegree 0, add them back to the queue
-      // if (adj_list.find(txn) != adj_list.end()) {
-      std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
-      std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
-
+      adj_list_mutex[txn].lock();
       auto neighbors = adj_list[txn];
+      adj_list_mutex[txn].unlock();
       for (auto nei : neighbors) {
+        indegree_mutex[nei].lock();
         indegree[nei]--;
         if (indegree[nei] == 0) {
           calvin_ready_txns_.Push(nei);
         }
+        indegree_mutex[nei].unlock();
       }
 
       // Return result to client.
@@ -339,12 +339,11 @@ void TxnProcessor::RunCalvinScheduler() {
 
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
-      adj_list_lock.lock();
-      adj_list[txn] = {};
-      adj_list_lock.unlock();
+      indegree_mutex[txn].lock();
 
-      adj_list_lock.lock();
-      indegree_lock.lock();
+      adj_list_mutex[txn].lock();
+      adj_list[txn] = {};
+      adj_list_mutex[txn].unlock();
 
       // Print the adj_list in one go so the lines aren't interleaved
 
@@ -364,7 +363,9 @@ void TxnProcessor::RunCalvinScheduler() {
         if (last_excl.contains(key) && last_excl[key] != txn &&
             last_excl[key]->Status() == INCOMPLETE &&
             !adj_list[last_excl[key]].contains(txn)) {
+          adj_list_mutex[last_excl[key]].lock();
           adj_list[last_excl[key]].insert(txn);
+          adj_list_mutex[last_excl[key]].unlock();
           ind++;
         }
       }
@@ -377,7 +378,9 @@ void TxnProcessor::RunCalvinScheduler() {
             if (conflicting_txn != txn &&
                 conflicting_txn->Status() == INCOMPLETE &&
                 !adj_list[conflicting_txn].contains(txn)) {
+              adj_list_mutex[conflicting_txn].lock();
               adj_list[conflicting_txn].insert(txn);
+              adj_list_mutex[conflicting_txn].unlock();
               ind++;
             }
           }
@@ -395,8 +398,7 @@ void TxnProcessor::RunCalvinScheduler() {
         // Otherwise, add it to the indegree hashmap
         indegree[txn] = ind;
       }
-      indegree_lock.unlock();
-      adj_list_lock.unlock();
+      indegree_mutex[txn].unlock();
     }
   }
 }
