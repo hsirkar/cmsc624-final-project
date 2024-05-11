@@ -315,7 +315,7 @@ void TxnProcessor::CalvinExecutorFunc() {
       // If any has indegree 0, add them back to the queue
       // if (adj_list.find(txn) != adj_list.end()) {
       std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
-      indegree_lock.lock();
+      std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
 
       auto neighbors = adj_list[txn];
       for (auto nei : neighbors) {
@@ -324,8 +324,6 @@ void TxnProcessor::CalvinExecutorFunc() {
           calvin_ready_txns_.Push(nei);
         }
       }
-      indegree_lock.unlock();
-      // }
 
       // Return result to client.
       txn_results_.Push(txn);

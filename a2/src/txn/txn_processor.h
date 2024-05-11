@@ -84,7 +84,7 @@ private:
   std::queue<Txn *> *root_txns;
 
   std::shared_mutex adj_list_lock;
-  std::mutex indegree_lock;
+  std::shared_mutex indegree_lock;
 
   // Continuously run by each of the worker threads LMAO
   void CalvinExecutorFunc();
