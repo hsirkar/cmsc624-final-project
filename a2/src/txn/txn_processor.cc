@@ -53,7 +53,6 @@ TxnProcessor::TxnProcessor(CCMode mode)
       tp_.AddTask([this]() { this->CalvinExecutorFunc(); });
     }
   }
-
 }
 
 void *TxnProcessor::StartScheduler(void *arg) {
@@ -343,7 +342,7 @@ void TxnProcessor::RunCalvinScheduler() {
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
       adj_list_lock.lock();
-      adj_list[txn] = std::unordered_set<Txn *>();\
+      adj_list[txn] = std::unordered_set<Txn *>();
       adj_list_lock.unlock();
 
       adj_list_lock.lock();

@@ -4,11 +4,11 @@
 #include <atomic>
 #include <deque>
 #include <map>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <mutex>
-#include <shared_mutex>
 
 #include "lock_manager.h"
 #include "mvcc_storage.h"
@@ -84,7 +84,7 @@ private:
   std::queue<Txn *> *root_txns;
 
   std::shared_mutex adj_list_lock;
-  std::mutex indegree_lock; 
+  std::mutex indegree_lock;
 
   // Continuously run by each of the worker threads LMAO
   void CalvinExecutorFunc();
@@ -183,7 +183,7 @@ private:
   // will ever access this queue.
   deque<Txn *> ready_txns_;
 
-  AtomicQueue<Txn* > calvin_ready_txns_;
+  AtomicQueue<Txn *> calvin_ready_txns_;
 
   // Queue of completed (but not yet committed/aborted) transactions.
   AtomicQueue<Txn *> completed_txns_;
