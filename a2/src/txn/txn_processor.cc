@@ -8,7 +8,7 @@
 #include "lock_manager.h"
 
 // Thread & queue counts for StaticThreadPool initialization.
-#define THREAD_COUNT 4
+#define THREAD_COUNT 8
 
 TxnProcessor::TxnProcessor(CCMode mode)
     : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
@@ -307,8 +307,9 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
   // Update indegrees of neighbors
   // If any has indegree 0, add them back to the queue
   // if (adj_list.find(txn) != adj_list.end()) {
-  adj_list_lock.lock();
-  indegree_lock.lock();
+  std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
+  std::lock_guard<std::mutex> indegree_lock_guard(indegree_lock);
+
   auto neighbors = adj_list[txn];
   for (auto nei : neighbors) {
     indegree[nei]--;
@@ -316,8 +317,6 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
       tp_.AddTask([this, nei]() { this->ExecuteTxnCalvin(nei); });
     }
   }
-  adj_list_lock.unlock();
-  indegree_lock.unlock();
   // }
 
   // Return result to client.
