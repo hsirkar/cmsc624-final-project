@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <mutex>
 
 #include "lock_manager.h"
 #include "mvcc_storage.h"
@@ -80,6 +81,9 @@ private:
   std::unordered_map<Txn *, std::atomic<int>>
       indegree; // indegree needs to be atomic
   std::queue<Txn *> *root_txns;
+
+  std::mutex adj_list_lock;
+  std::mutex indegree_lock; 
 
   void ExecuteTxnCalvin(Txn *txn);
   void RunCalvinScheduler();

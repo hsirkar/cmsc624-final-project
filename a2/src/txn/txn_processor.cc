@@ -8,7 +8,7 @@
 #include "lock_manager.h"
 
 // Thread & queue counts for StaticThreadPool initialization.
-#define THREAD_COUNT 8
+#define THREAD_COUNT 4
 
 TxnProcessor::TxnProcessor(CCMode mode)
     : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
@@ -67,9 +67,6 @@ TxnProcessor::~TxnProcessor() {
 
   // Deallocate EVERYTHING in adj_list and indegree
   if (mode_ == CALVIN) {
-    for (auto it = adj_list.begin(); it != adj_list.end(); it++) {
-      delete it->second;
-    }
     adj_list.clear();
     indegree.clear();
   }
@@ -310,6 +307,8 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
   // Update indegrees of neighbors
   // If any has indegree 0, add them back to the queue
   // if (adj_list.find(txn) != adj_list.end()) {
+  adj_list_lock.lock();
+  indegree_lock.lock();
   auto neighbors = adj_list[txn];
   for (auto nei : neighbors) {
     indegree[nei]--;
@@ -317,6 +316,8 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
       tp_.AddTask([this, nei]() { this->ExecuteTxnCalvin(nei); });
     }
   }
+  adj_list_lock.unlock();
+  indegree_lock.unlock();
   // }
 
   // Return result to client.
@@ -331,6 +332,8 @@ void TxnProcessor::RunCalvinScheduler() {
 
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
+      adj_list_lock.lock();
+      indegree_lock.lock();
       adj_list[txn] = std::unordered_set<Txn *>();
 
       // Print the adj_list in one go so the lines aren't interleaved
@@ -381,6 +384,8 @@ void TxnProcessor::RunCalvinScheduler() {
         // Otherwise, add it to the indegree hashmap
         indegree[txn] = ind;
       }
+      indegree_lock.unlock();
+      adj_list_lock.unlock();
     }
   }
 }

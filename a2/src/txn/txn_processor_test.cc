@@ -138,8 +138,12 @@ void Benchmark(const vector<LoadGen *> &lg) {
   deque<Txn *> doneTxns;
 
   // For each MODE...
-  for (CCMode mode = SERIAL; mode <= CALVIN_EPOCH;
+  for (CCMode mode = SERIAL; mode <= CALVIN;
        mode = static_cast<CCMode>(mode + 1)) {
+
+    if (mode == MVCC || mode == MVCC_SSI)
+      continue;
+
     // Print out mode name.
     cout << ModeToString(mode) << flush;
 
