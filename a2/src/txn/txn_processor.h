@@ -88,8 +88,6 @@ private:
 
   // Continuously run by each of the worker threads LMAO
   void CalvinExecutorFunc();
-
-  void ExecuteTxnCalvin(Txn *txn);
   void RunCalvinScheduler();
 
   // Calvin Epoch Scheduler
