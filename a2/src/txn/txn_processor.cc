@@ -92,9 +92,7 @@ void TxnProcessor::NewTxnRequest(Txn *txn) {
 
 Txn *TxnProcessor::GetTxnResult() {
   Txn *txn;
-  // std::cout << "Now waiting for txns!" << std::endl;
   while (!txn_results_.Pop(&txn)) {
-    // std::cout << "lol waiting" << std::endl;
     // No result yet. Wait a bit before trying again (to reduce contention on
     // atomic queues).
     usleep(1);
@@ -297,8 +295,6 @@ void TxnProcessor::CalvinExecutorFunc() {
   Txn *txn;
   while (!stopped_) {
     if (calvin_ready_txns_.Pop(&txn)) {
-      
-      // std::cout << "Executing Txn " << txn->unique_id_ << std::endl;
       // Execute txn.
       ExecuteTxn(txn);
 
