@@ -308,7 +308,7 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
   // If any has indegree 0, add them back to the queue
   // if (adj_list.find(txn) != adj_list.end()) {
   std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
-  std::lock_guard<std::mutex> indegree_lock_guard(indegree_lock);
+  indegree_lock.lock();
 
   auto neighbors = adj_list[txn];
   for (auto nei : neighbors) {
@@ -317,6 +317,7 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
       tp_.AddTask([this, nei]() { this->ExecuteTxnCalvin(nei); });
     }
   }
+  indegree_lock.unlock();
   // }
 
   // Return result to client.
@@ -332,8 +333,11 @@ void TxnProcessor::RunCalvinScheduler() {
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
       adj_list_lock.lock();
+      adj_list[txn] = std::unordered_set<Txn *>();\
+      adj_list_lock.unlock();
+
+      adj_list_lock.lock();
       indegree_lock.lock();
-      adj_list[txn] = std::unordered_set<Txn *>();
 
       // Print the adj_list in one go so the lines aren't interleaved
 
