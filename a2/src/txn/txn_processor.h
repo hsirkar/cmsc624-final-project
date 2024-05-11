@@ -97,7 +97,9 @@ private:
   // Calvin Epoch Scheduler
   struct EpochDag {
     std::unordered_map<Txn *, std::unordered_set<Txn *>> *adj_list;
-    std::unordered_map<Txn *, std::atomic<int>> *indegree;
+    std::unordered_map<Txn *, int> *indegree;
+    std::unordered_map<Txn *, pthread_mutex_t*> *indegree_locks;
+
     std::queue<Txn *> *root_txns;
   };
 
