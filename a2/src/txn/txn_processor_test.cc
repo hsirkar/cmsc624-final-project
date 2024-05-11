@@ -140,6 +140,8 @@ void Benchmark(const vector<LoadGen *> &lg) {
   // For each MODE...
   for (CCMode mode = SERIAL; mode <= CALVIN_EPOCH;
        mode = static_cast<CCMode>(mode + 1)) {
+//    if(mode != CALVIN_EPOCH)
+//      continue;
     if(mode == MVCC || mode == MVCC_SSI || mode == CALVIN)
       continue;
     // Print out mode name.

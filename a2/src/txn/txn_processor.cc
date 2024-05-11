@@ -7,7 +7,7 @@
 #include "lock_manager.h"
 
 // Thread & queue counts for StaticThreadPool initialization.
-#define THREAD_COUNT 8
+#define THREAD_COUNT 3
 
 TxnProcessor::TxnProcessor(CCMode mode)
     : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
@@ -259,7 +259,7 @@ void TxnProcessor::RunCalvinSequencer() {
     auto curr_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         curr_time - last_epoch_time);
-    if (duration.count() > 10) {
+    if (duration.count() > 5) {
       // new epoch is out of scope
       last_epoch_time = curr_time;
 
@@ -304,6 +304,48 @@ void TxnProcessor::ExecuteTxnCalvin(Txn *txn) {
   txn_results_.Push(txn);
 }
 
+void TxnProcessor::CalvinEpochExecutorLMAO() {
+  Txn *txn;
+  while (!stopped_) {
+    // Get the next new transaction request (if one is pending) and pass it to
+    // an execution thread that executes the txn logic *and also* does the
+    // validation and write phases.
+    if (calvin_ready_txns_.Pop(&txn)) {
+      ExecuteTxn(txn);
+
+      // Commit/abort txn according to program logic's commit/abort decision.
+      // Note: we do this within the worker thread instead of returning
+      // back to the scheduler thread.
+      if (txn->Status() == COMPLETED_C) {
+        ApplyWrites(txn);
+        committed_txns_.Push(txn);
+        txn->status_ = COMMITTED;
+      } else if (txn->Status() == COMPLETED_A) {
+        txn->status_ = ABORTED;
+      } else {
+        // Invalid TxnStatus!
+        DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+      }
+
+      num_txns_left_in_epoch--;
+
+      // Update indegrees of neighbors
+      // If any has indegree 0, add them back to the queue
+      auto neighbors = current_epoch_dag->adj_list->at(txn);
+      for (Txn* blocked_txn : neighbors) {
+        if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
+          calvin_ready_txns_.Push(blocked_txn);
+        }
+      }
+
+      // Return result to client.
+      txn_results_.Push(txn);
+
+    }
+  }
+
+}
+
 void TxnProcessor::RunCalvinScheduler() {
   Txn *txn;
 
@@ -317,47 +359,50 @@ void TxnProcessor::RunCalvinScheduler() {
   }
 }
 
-void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
-
-  ExecuteTxn(txn);
-
-  // Commit/abort txn according to program logic's commit/abort decision.
-  // Note: we do this within the worker thread instead of returning
-  // back to the scheduler thread.
-  if (txn->Status() == COMPLETED_C) {
-    ApplyWrites(txn);
-    committed_txns_.Push(txn);
-    txn->status_ = COMMITTED;
-  } else if (txn->Status() == COMPLETED_A) {
-    txn->status_ = ABORTED;
-  } else {
-    // Invalid TxnStatus!
-    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
-  }
-
-  num_txns_left_in_epoch--;
-
-  // Update indegrees of neighbors
-  // If any has indegree 0, add them back to the queue
-  auto neighbors = current_epoch_dag->adj_list->at(txn);
-  for (Txn* blocked_txn : neighbors) {
-    if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
-      tp_.AddTask([this, blocked_txn]() { this->ExecuteTxnCalvinEpoch(blocked_txn); });
-    }
-  }
-
-  // Return result to client.
-  txn_results_.Push(txn);
-}
+//void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
+//
+//  ExecuteTxn(txn);
+//
+//  // Commit/abort txn according to program logic's commit/abort decision.
+//  // Note: we do this within the worker thread instead of returning
+//  // back to the scheduler thread.
+//  if (txn->Status() == COMPLETED_C) {
+//    ApplyWrites(txn);
+//    committed_txns_.Push(txn);
+//    txn->status_ = COMMITTED;
+//  } else if (txn->Status() == COMPLETED_A) {
+//    txn->status_ = ABORTED;
+//  } else {
+//    // Invalid TxnStatus!
+//    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+//  }
+//
+//  num_txns_left_in_epoch--;
+//
+//  // Update indegrees of neighbors
+//  // If any has indegree 0, add them back to the queue
+//  auto neighbors = current_epoch_dag->adj_list->at(txn);
+//  for (Txn* blocked_txn : neighbors) {
+//    if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
+//      tp_.AddTask([this, blocked_txn]() { this->ExecuteTxnCalvinEpoch(blocked_txn); });
+//    }
+//  }
+//
+//  // Return result to client.
+//  txn_results_.Push(txn);
+//}
 
 void TxnProcessor::RunCalvinEpochScheduler() {
 
   // Start Calvin Sequencer
   pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
                  reinterpret_cast<void *>(this));
-  // Start Calvin Epoch Executor
+//   Start Calvin Epoch Executor
   pthread_create(&calvin_epoch_executor_thread, NULL, calvin_epoch_executor_helper,
                  reinterpret_cast<void *>(this));
+  for(int i = 0; i < THREAD_COUNT; i++) {
+    tp_.AddTask([this]() { this->CalvinEpochExecutorLMAO(); });
+  }
 
   Epoch *curr_epoch;
   EpochDag *dag;
@@ -372,7 +417,6 @@ void TxnProcessor::RunCalvinEpochScheduler() {
 
       std::unordered_map<Txn *, std::unordered_set<Txn *>>* adj_list = new std::unordered_map<Txn *, std::unordered_set<Txn *>>();
       std::unordered_map<Txn *, std::atomic<int>>* indegree = new std::unordered_map<Txn *, std::atomic<int>>();
-//      std::unordered_map<Txn *, pthread_mutex_t*>* indegree_locks = new std::unordered_map<Txn *, pthread_mutex_t*>();
       std::queue<Txn *>* root_txns = new std::queue<Txn *>();
 
       Txn *txn;
@@ -381,9 +425,6 @@ void TxnProcessor::RunCalvinEpochScheduler() {
         curr_epoch->pop();
         adj_list->emplace(txn, std::unordered_set<Txn *>());
         indegree->emplace(txn, 0);
-//        pthread_mutex_t* new_mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-//        new_mutex[0] = PTHREAD_MUTEX_INITIALIZER;
-//        indegree_locks->emplace(txn, new_mutex);
 
         // Loop through readset
         for (const Key &key : txn->readset_) {
@@ -454,7 +495,9 @@ void TxnProcessor::CalvinEpochExecutor() {
       while (!root_txns->empty()) {
         txn = root_txns->front();
         root_txns->pop();
-        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+//        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+        calvin_ready_txns_.Push(txn);
+//        calvin_ready_txns_.
       }
 
       // wait for epoch to end executing
@@ -465,6 +508,10 @@ void TxnProcessor::CalvinEpochExecutor() {
         if (sleep_duration < 32)
           sleep_duration *= 2;
       }
+      delete current_epoch->adj_list;
+      delete current_epoch->indegree;
+      delete current_epoch->root_txns;
+      free(current_epoch);
     }
   }
 }

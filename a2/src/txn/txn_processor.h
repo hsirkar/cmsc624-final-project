@@ -109,6 +109,8 @@ private:
   void ExecuteTxnCalvinEpoch(Txn *txn);
   void RunCalvinEpochScheduler();
 
+  void CalvinEpochExecutorLMAO();
+
   std::atomic<uint> num_txns_left_in_epoch;
 
   pthread_cond_t epoch_finished_cond;
@@ -185,6 +187,8 @@ private:
   // Does not need to be atomic because RunScheduler is the only thread that
   // will ever access this queue.
   deque<Txn *> ready_txns_;
+
+  AtomicQueue<Txn*> calvin_ready_txns_;
 
   // Queue of completed (but not yet committed/aborted) transactions.
   AtomicQueue<Txn *> completed_txns_;
