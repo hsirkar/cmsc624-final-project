@@ -77,19 +77,7 @@ private:
   // helper function to call calvin sequencer in pthread
   static void *calvin_sequencer_helper(void *arg);
 
-  // Calvin Continuous Scheduler
-  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
-  std::unordered_map<Txn *, std::atomic<int>>
-      indegree; // indegree needs to be atomic
-  std::queue<Txn *> *root_txns;
-
-  std::unordered_map<Txn*, std::shared_mutex> adj_list_mutex;
-  std::unordered_map<Txn*, std::shared_mutex> indegree_mutex;
-
-  // std::shared_mutex adj_list_lock;
-  // std::shared_mutex indegree_lock;
-
-  // Continuously run by each of the worker threads LMAO
+  // Continuously run by each of the worker threads
   void CalvinExecutorFunc();
   void RunCalvinScheduler();
 
