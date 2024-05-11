@@ -86,6 +86,9 @@ private:
   std::shared_mutex adj_list_lock;
   std::mutex indegree_lock; 
 
+  // Continuously run by each of the worker threads LMAO
+  void CalvinExecutorFunc();
+
   void ExecuteTxnCalvin(Txn *txn);
   void RunCalvinScheduler();
 
@@ -179,6 +182,8 @@ private:
   // Does not need to be atomic because RunScheduler is the only thread that
   // will ever access this queue.
   deque<Txn *> ready_txns_;
+
+  AtomicQueue<Txn* > calvin_ready_txns_;
 
   // Queue of completed (but not yet committed/aborted) transactions.
   AtomicQueue<Txn *> completed_txns_;
