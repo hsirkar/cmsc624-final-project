@@ -306,14 +306,17 @@ void TxnProcessor::CalvinExecutorFunc() {
       }
 
       // Update indegrees of neighbors
+      txn->neighbors_mutex.lock();
       std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(), txn->neighbors.end());
       std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
+      txn->neighbors_mutex.unlock();
       for (Txn *nei : sorted_neighbors) {
-        std::unique_lock<std::mutex> indegree_lock(nei->indegree_mutex);
+        nei->indegree_mutex.lock();
         nei->indegree--;
         if (nei->indegree == 0) {
           calvin_ready_txns_.Push(nei);
         }
+        nei->indegree_mutex.unlock();
       }
 
       // Return result to client.
@@ -336,7 +339,7 @@ void TxnProcessor::RunCalvinScheduler() {
       sorted_keys.insert(sorted_keys.end(), txn->writeset_.begin(), txn->writeset_.end());
       std::sort(sorted_keys.begin(), sorted_keys.end());
 
-      std::unique_lock<std::mutex> indegree_lock(txn->indegree_mutex);
+      txn->indegree_mutex.lock();
       txn->indegree = 0;
       txn->neighbors.clear();
 
@@ -350,10 +353,11 @@ void TxnProcessor::RunCalvinScheduler() {
 
           if (last_excl.contains(key) && last_excl[key] != txn &&
               last_excl[key]->Status() == INCOMPLETE) {
-            std::unique_lock<std::mutex> neighbors_lock(last_excl[key]->neighbors_mutex);
+            last_excl[key]->neighbors_mutex.lock();
             txn->indegree++;
             txn->neighbors.insert(last_excl[key]);
             last_excl[key]->neighbors.insert(txn);
+            last_excl[key]->neighbors_mutex.unlock();
           }
         }
 
@@ -363,10 +367,11 @@ void TxnProcessor::RunCalvinScheduler() {
             for (auto conflicting_txn : shared_holders[key]) {
               if (conflicting_txn != txn &&
                   conflicting_txn->Status() == INCOMPLETE) {
-                std::unique_lock<std::mutex> neighbors_lock(conflicting_txn->neighbors_mutex);
+                conflicting_txn->neighbors_mutex.lock();
                 txn->indegree++;
                 txn->neighbors.insert(conflicting_txn);
                 conflicting_txn->neighbors.insert(txn);
+                conflicting_txn->neighbors_mutex.unlock();
               }
             }
             shared_holders[key].clear();
@@ -380,6 +385,7 @@ void TxnProcessor::RunCalvinScheduler() {
       if (txn->indegree == 0) {
         calvin_ready_txns_.Push(txn);
       }
+      txn->indegree_mutex.unlock();
     }
   }
 }
