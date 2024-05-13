@@ -8,7 +8,7 @@
 #include "lock_manager.h"
 
 // Thread & queue counts for StaticThreadPool initialization.
-#define THREAD_COUNT 8
+#define THREAD_COUNT 7
 
 TxnProcessor::TxnProcessor(CCMode mode)
     : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
@@ -294,7 +294,6 @@ void TxnProcessor::CalvinExecutorFunc() {
       // Commit/abort txn according to program logic's commit/abort decision.
       // Note: we do this within the worker thread instead of returning
       // back to the scheduler thread.
-      txn->neighbors_mutex.lock();
       if (txn->Status() == COMPLETED_C) {
         ApplyWrites(txn);
         committed_txns_.Push(txn);
@@ -307,9 +306,11 @@ void TxnProcessor::CalvinExecutorFunc() {
       }
 
       // Update indegrees of neighbors
-      std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(), txn->neighbors.end());
-      std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
+      txn->neighbors_mutex.lock();
+      std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(),
+                                          txn->neighbors.end());
       txn->neighbors_mutex.unlock();
+      std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
 
       for (Txn *nei : sorted_neighbors) {
         nei->indegree_mutex.lock();
@@ -336,8 +337,10 @@ void TxnProcessor::RunCalvinScheduler() {
     if (txn_requests_.Pop(&txn)) {
       std::vector<Key> sorted_keys;
       sorted_keys.reserve(txn->readset_.size() + txn->writeset_.size());
-      sorted_keys.insert(sorted_keys.end(), txn->readset_.begin(), txn->readset_.end());
-      sorted_keys.insert(sorted_keys.end(), txn->writeset_.begin(), txn->writeset_.end());
+      sorted_keys.insert(sorted_keys.end(), txn->readset_.begin(),
+                         txn->readset_.end());
+      sorted_keys.insert(sorted_keys.end(), txn->writeset_.begin(),
+                         txn->writeset_.end());
       std::sort(sorted_keys.begin(), sorted_keys.end());
 
       txn->indegree_mutex.lock();
@@ -355,7 +358,10 @@ void TxnProcessor::RunCalvinScheduler() {
           if (last_excl.contains(key) && last_excl[key] != txn) {
             last_excl[key]->neighbors_mutex.lock();
 
-            if (last_excl[key]->Status() == INCOMPLETE) {
+            if (last_excl[key]->Status() != COMMITTED &&
+                last_excl[key]->Status() != ABORTED) {
+              // We came in before CalvinExecutorFunc took "snapshot" of
+              // neighbors
               txn->indegree++;
               last_excl[key]->neighbors.insert(txn);
             }
@@ -371,7 +377,10 @@ void TxnProcessor::RunCalvinScheduler() {
               if (conflicting_txn != txn) {
                 conflicting_txn->neighbors_mutex.lock();
 
-                if (conflicting_txn->Status() == INCOMPLETE) {
+                if (conflicting_txn->Status() != COMMITTED &&
+                    conflicting_txn->Status() != ABORTED) {
+                  // We came in before CalvinExecutorFunc took "snapshot" of
+                  // neighbors
                   txn->indegree++;
                   conflicting_txn->neighbors.insert(txn);
                 }
