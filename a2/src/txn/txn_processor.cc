@@ -294,6 +294,7 @@ void TxnProcessor::CalvinExecutorFunc() {
       // Commit/abort txn according to program logic's commit/abort decision.
       // Note: we do this within the worker thread instead of returning
       // back to the scheduler thread.
+      txn->neighbors_mutex.lock();
       if (txn->Status() == COMPLETED_C) {
         ApplyWrites(txn);
         committed_txns_.Push(txn);
@@ -306,10 +307,10 @@ void TxnProcessor::CalvinExecutorFunc() {
       }
 
       // Update indegrees of neighbors
-      txn->neighbors_mutex.lock();
       std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(), txn->neighbors.end());
       std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
       txn->neighbors_mutex.unlock();
+
       for (Txn *nei : sorted_neighbors) {
         nei->indegree_mutex.lock();
         nei->indegree--;
@@ -351,12 +352,14 @@ void TxnProcessor::RunCalvinScheduler() {
           }
           shared_holders[key].insert(txn);
 
-          if (last_excl.contains(key) && last_excl[key] != txn &&
-              last_excl[key]->Status() == INCOMPLETE) {
+          if (last_excl.contains(key) && last_excl[key] != txn) {
             last_excl[key]->neighbors_mutex.lock();
-            txn->indegree++;
-            txn->neighbors.insert(last_excl[key]);
-            last_excl[key]->neighbors.insert(txn);
+
+            if (last_excl[key]->Status() == INCOMPLETE) {
+              txn->indegree++;
+              last_excl[key]->neighbors.insert(txn);
+            }
+
             last_excl[key]->neighbors_mutex.unlock();
           }
         }
@@ -365,12 +368,14 @@ void TxnProcessor::RunCalvinScheduler() {
         if (txn->writeset_.count(key)) {
           if (shared_holders.contains(key)) {
             for (auto conflicting_txn : shared_holders[key]) {
-              if (conflicting_txn != txn &&
-                  conflicting_txn->Status() == INCOMPLETE) {
+              if (conflicting_txn != txn) {
                 conflicting_txn->neighbors_mutex.lock();
-                txn->indegree++;
-                txn->neighbors.insert(conflicting_txn);
-                conflicting_txn->neighbors.insert(txn);
+
+                if (conflicting_txn->Status() == INCOMPLETE) {
+                  txn->indegree++;
+                  conflicting_txn->neighbors.insert(txn);
+                }
+
                 conflicting_txn->neighbors_mutex.unlock();
               }
             }
