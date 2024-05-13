@@ -138,7 +138,7 @@ void Benchmark(const vector<LoadGen *> &lg) {
   deque<Txn *> doneTxns;
 
   // For each MODE...
-  for (CCMode mode = SERIAL; mode <= CALVIN_EPOCH;
+  for (CCMode mode = CALVIN_EPOCH; mode <= CALVIN_EPOCH;
        mode = static_cast<CCMode>(mode + 1)) {
 //    if(mode != CALVIN_EPOCH)
 //      continue;

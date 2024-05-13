@@ -327,20 +327,22 @@ void TxnProcessor::CalvinEpochExecutorLMAO() {
         DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
       }
 
-      num_txns_left_in_epoch--;
+
 
       // Update indegrees of neighbors
       // If any has indegree 0, add them back to the queue
-      auto neighbors = current_epoch_dag->adj_list->at(txn);
-      for (Txn* blocked_txn : neighbors) {
-        if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
-          calvin_ready_txns_.Push(blocked_txn);
+      if(num_txns_left_in_epoch-- > 1) {
+        auto neighbors = current_epoch_dag->adj_list->at(txn);
+        for (Txn* blocked_txn : neighbors) {
+          if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
+            calvin_ready_txns_.Push(blocked_txn);
+          }
         }
       }
 
+
       // Return result to client.
       txn_results_.Push(txn);
-
     }
   }
 
@@ -359,38 +361,41 @@ void TxnProcessor::RunCalvinScheduler() {
   }
 }
 
-//void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
-//
-//  ExecuteTxn(txn);
-//
-//  // Commit/abort txn according to program logic's commit/abort decision.
-//  // Note: we do this within the worker thread instead of returning
-//  // back to the scheduler thread.
-//  if (txn->Status() == COMPLETED_C) {
-//    ApplyWrites(txn);
-//    committed_txns_.Push(txn);
-//    txn->status_ = COMMITTED;
-//  } else if (txn->Status() == COMPLETED_A) {
-//    txn->status_ = ABORTED;
-//  } else {
-//    // Invalid TxnStatus!
-//    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
-//  }
-//
-//  num_txns_left_in_epoch--;
-//
-//  // Update indegrees of neighbors
-//  // If any has indegree 0, add them back to the queue
-//  auto neighbors = current_epoch_dag->adj_list->at(txn);
-//  for (Txn* blocked_txn : neighbors) {
-//    if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
-//      tp_.AddTask([this, blocked_txn]() { this->ExecuteTxnCalvinEpoch(blocked_txn); });
-//    }
-//  }
-//
-//  // Return result to client.
-//  txn_results_.Push(txn);
-//}
+void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
+
+  ExecuteTxn(txn);
+
+  // Commit/abort txn according to program logic's commit/abort decision.
+  // Note: we do this within the worker thread instead of returning
+  // back to the scheduler thread.
+  if (txn->Status() == COMPLETED_C) {
+    ApplyWrites(txn);
+    committed_txns_.Push(txn);
+    txn->status_ = COMMITTED;
+  } else if (txn->Status() == COMPLETED_A) {
+    txn->status_ = ABORTED;
+  } else {
+    // Invalid TxnStatus!
+    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+  }
+
+
+
+  // Update indegrees of neighbors
+  // If any has indegree 0, add them back to the queue
+if(num_txns_left_in_epoch-- > 1) {
+  auto neighbors = current_epoch_dag->adj_list->at(txn);
+  for (Txn* blocked_txn : neighbors) {
+    if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
+      tp_.AddTask([this, blocked_txn]() { this->ExecuteTxnCalvinEpoch(blocked_txn); });
+    }
+  }
+}
+
+
+  // Return result to client.
+  txn_results_.Push(txn);
+}
 
 void TxnProcessor::RunCalvinEpochScheduler() {
 
@@ -400,9 +405,9 @@ void TxnProcessor::RunCalvinEpochScheduler() {
 //   Start Calvin Epoch Executor
   pthread_create(&calvin_epoch_executor_thread, NULL, calvin_epoch_executor_helper,
                  reinterpret_cast<void *>(this));
-  for(int i = 0; i < THREAD_COUNT; i++) {
-    tp_.AddTask([this]() { this->CalvinEpochExecutorLMAO(); });
-  }
+  // for(int i = 0; i < THREAD_COUNT; i++) {
+  //   tp_.AddTask([this]() { this->CalvinEpochExecutorLMAO(); });
+  // }
 
   Epoch *curr_epoch;
   EpochDag *dag;
@@ -495,8 +500,8 @@ void TxnProcessor::CalvinEpochExecutor() {
       while (!root_txns->empty()) {
         txn = root_txns->front();
         root_txns->pop();
-//        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
-        calvin_ready_txns_.Push(txn);
+        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+        // calvin_ready_txns_.Push(txn);
 //        calvin_ready_txns_.
       }
 
