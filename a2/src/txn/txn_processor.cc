@@ -47,6 +47,8 @@ TxnProcessor::TxnProcessor(CCMode mode)
   stopped_ = false;
   scheduler_thread_ = scheduler_;
 
+  current_epoch_dag = NULL;
+
   // For all Calvin executions, start the proper ExecutorFunc
   if (mode_ >= CALVIN_CONT) {
     for (int i = 0; i < THREAD_COUNT; i++) {
@@ -77,12 +79,6 @@ TxnProcessor::~TxnProcessor() {
 
   if(mode_ == CALVIN_EPOCH) {
     pthread_join(calvin_sequencer_thread, NULL);
-    if(current_epoch_dag != NULL) {
-      delete current_epoch_dag->adj_list;
-      delete current_epoch_dag->indegree;
-      delete current_epoch_dag->root_txns;
-      free(current_epoch_dag);
-    }
   }
   pthread_join(scheduler_thread_, NULL);
 
