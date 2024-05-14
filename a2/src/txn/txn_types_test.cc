@@ -7,7 +7,7 @@
 #include "utils/testing.h"
 
 TEST(NoopTest) {
-  TxnProcessor p(SERIAL);
+  TxnProcessor p(SERIAL, STATIC);
 
   Txn *t = new Noop();
   EXPECT_EQ(INCOMPLETE, t->Status());
@@ -22,7 +22,7 @@ TEST(NoopTest) {
 }
 
 TEST(PutTest) {
-  TxnProcessor p(SERIAL);
+  TxnProcessor p(SERIAL, STATIC);
   Txn *t;
 
   std::map<Key, Value> m1 = {{1, 2}};
@@ -51,7 +51,7 @@ TEST(PutTest) {
 }
 
 TEST(PutMultipleTest) {
-  TxnProcessor p(SERIAL);
+  TxnProcessor p(SERIAL, STATIC);
   Txn *t;
 
   map<Key, Value> m;

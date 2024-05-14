@@ -27,16 +27,22 @@ using std::string;
 // the four parts of assignment 2, plus a simple serial (non-concurrent) mode,
 // plus Calvin (as a part of the final project).
 enum CCMode {
-  SERIAL = 0,                 // Serial transaction execution (no concurrency)
-  LOCKING_EXCLUSIVE_ONLY = 1, // Part 1A
-  LOCKING = 2,                // Part 1B
-  OCC = 3,                    // Part 2
-  P_OCC = 4,                  // Part 3
-  MVCC = 5,                   // Part 4
-  MVCC_SSI = 6,               // Part 5
-  CALVIN_CONT = 7,
-  CALVIN_CONT_INDIV = 8,
-  CALVIN_EPOCH = 9,
+  SERIAL,                 // Serial transaction execution (no concurrency)
+  LOCKING_EXCLUSIVE_ONLY, // Part 1A
+  LOCKING,                // Part 1B
+  OCC,                    // Part 2
+  P_OCC,                  // Part 3
+  MVCC,                   // Part 4
+  MVCC_SSI,               // Part 5
+  CALVIN_CONT,
+  CALVIN_CONT_INDIV,
+  CALVIN_EPOCH
+};
+
+enum EXECMode {
+  STATIC,
+  STEAL,
+  FUNC,
 };
 
 // Returns a human-readable string naming of the providing mode.
@@ -46,7 +52,7 @@ class TxnProcessor {
 public:
   // The TxnProcessor's constructor starts the TxnProcessor running in the
   // background.
-  explicit TxnProcessor(CCMode mode);
+  explicit TxnProcessor(CCMode cc_mode, EXECMode exec_mode);
 
   // The TxnProcessor's destructor stops all background threads and deallocates
   // all objects currently owned by the TxnProcessor, except for Txn objects.
@@ -183,7 +189,10 @@ private:
   void MVCCUnlockWriteKeys(Txn *txn);
 
   // Concurrency control mechanism the TxnProcessor is currently using.
-  CCMode mode_;
+  CCMode cc_mode_;
+
+  // Exec Mode
+  EXECMode exec_mode;
 
   // Thread pool managing all threads used by TxnProcessor.
   std::shared_ptr<StaticThreadPool> tp_;

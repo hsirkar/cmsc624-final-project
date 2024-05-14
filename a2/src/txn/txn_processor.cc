@@ -8,18 +8,41 @@
 // Thread & queue counts for StaticThreadPool initialization.
 #define THREAD_COUNT 8
 
-TxnProcessor::TxnProcessor(CCMode mode) : mode_(mode), next_unique_id_(1) {
+TxnProcessor::TxnProcessor(CCMode cc_mode, EXECMode exec_mode)
+    : exec_mode(exec_mode), cc_mode_(cc_mode), next_unique_id_(1) {
 
-  tp_ = std::make_shared<StaticThreadPool>(THREAD_COUNT);
+  if (exec_mode == STATIC) {
+    tp_ = std::make_shared<StaticThreadPool>(THREAD_COUNT);
+  } else if (exec_mode == STEAL) {
+    // Steal Thread Pool
+  } else { // Functor for Calvin
+    if (cc_mode_ >= CALVIN_CONT) {
+      for (int i = 0; i < THREAD_COUNT; i++) {
+        switch (cc_mode_) {
+        case CALVIN_CONT:
+          tp_->AddTask([this]() { this->CalvinContExecutorFunc(); });
+          break;
+        case CALVIN_CONT_INDIV:
+          tp_->AddTask([this]() { this->CalvinContIndivExecutorFunc(); });
+          break;
+        case CALVIN_EPOCH:
+          tp_->AddTask([this]() { this->CalvinEpochExecutorFunc(); });
+          break;
+        }
+      }
+    } else {
+      tp_ = std::make_shared<StaticThreadPool>(THREAD_COUNT);
+    }
+  }
 
   // Create the locking manager
-  if (mode_ == LOCKING_EXCLUSIVE_ONLY)
+  if (cc_mode_ == LOCKING_EXCLUSIVE_ONLY)
     lm_ = std::make_shared<LockManagerA>(&ready_txns_);
-  else if (mode_ == LOCKING)
+  else if (cc_mode_ == LOCKING)
     lm_ = std::make_shared<LockManagerB>(&ready_txns_);
 
   // Create the storage
-  if (mode_ == MVCC || mode_ == MVCC_SSI) {
+  if (cc_mode_ == MVCC || cc_mode_ == MVCC_SSI) {
     storage_ = std::make_shared<MVCCStorage>();
   } else {
     storage_ = std::make_shared<Storage>();
@@ -47,23 +70,6 @@ TxnProcessor::TxnProcessor(CCMode mode) : mode_(mode), next_unique_id_(1) {
 
   stopped_ = false;
   scheduler_thread_ = scheduler_;
-
-  // For all Calvin executions, start the proper ExecutorFunc
-  if (mode_ >= CALVIN_CONT) {
-    for (int i = 0; i < THREAD_COUNT; i++) {
-      switch (mode_) {
-      case CALVIN_CONT:
-        tp_->AddTask([this]() { this->CalvinContExecutorFunc(); });
-        break;
-      case CALVIN_CONT_INDIV:
-        tp_->AddTask([this]() { this->CalvinContIndivExecutorFunc(); });
-        break;
-      case CALVIN_EPOCH:
-        tp_->AddTask([this]() { this->CalvinEpochExecutorFunc(); });
-        break;
-      }
-    }
-  }
 }
 
 void *TxnProcessor::StartScheduler(void *arg) {
@@ -98,7 +104,7 @@ Txn *TxnProcessor::GetTxnResult() {
 }
 
 void TxnProcessor::RunScheduler() {
-  switch (mode_) {
+  switch (cc_mode_) {
   case SERIAL:
     RunSerialScheduler();
     break;
@@ -118,13 +124,23 @@ void TxnProcessor::RunScheduler() {
     RunMVCCScheduler();
     break;
   case CALVIN_CONT:
-    RunCalvinContScheduler();
+    if (exec_mode == FUNC) {
+      RunCalvinContScheduler();
+    } else {
+    }
     break;
   case CALVIN_CONT_INDIV:
-    RunCalvinContIndivScheduler();
+    if (exec_mode == FUNC) {
+      RunCalvinContIndivScheduler();
+    } else {
+    }
     break;
   case CALVIN_EPOCH:
-    RunCalvinEpochScheduler();
+    if (exec_mode == FUNC) {
+      RunCalvinEpochScheduler();
+    } else {
+    }
+    break;
   }
 }
 

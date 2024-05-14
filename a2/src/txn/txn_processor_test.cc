@@ -156,7 +156,7 @@ void Benchmark(const vector<LoadGen *> &lg) {
         int txn_count = 0;
 
         // Create TxnProcessor in next mode.
-        TxnProcessor *p = new TxnProcessor(mode);
+        TxnProcessor *p = new TxnProcessor(mode, FUNC);
 
         // Record start time.
         double start = GetTime();
