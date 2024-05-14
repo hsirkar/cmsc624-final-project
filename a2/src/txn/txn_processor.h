@@ -68,6 +68,9 @@ public:
   // putting calvin sequencer as public for pthread
   void RunCalvinEpochSequencer();
 
+  // putting calvin epoch executor as public for pthread
+  void CalvinEpochExecutor();
+
 private:
 
   // ===================== START OF CALVIN =====================
@@ -75,6 +78,14 @@ private:
   /***********************************************
   *  Calvin Continuous Execution -- Global Locks *
   ***********************************************/
+  std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
+  std::unordered_map<Txn *, std::atomic<int>>
+      indegree; // indegree needs to be atomic
+  std::queue<Txn *> *root_txns;
+
+  std::shared_mutex adj_list_lock;
+  std::shared_mutex indegree_lock;
+
   void RunCalvinContScheduler();
   void CalvinContExecutorFunc();
 
@@ -91,6 +102,8 @@ private:
 
   // thread for calvin sequencer
   pthread_t calvin_sequencer_thread;
+  // thread for calvin sequencer
+  pthread_t calvin_epoch_executor_thread;
   // defining epoch for ease of use
   typedef std::queue<Txn *> Epoch;
   // queue of epochs for calvin scheduler
@@ -114,6 +127,9 @@ private:
   void RunCalvinEpochScheduler();
 
   // 3) Executor
+  // helper function to call calvin epoch executor in pthread
+  static void *calvin_epoch_executor_helper(void *arg);
+
   void CalvinEpochExecutorFunc();
 
   // ===================== END OF CALVIN =======================

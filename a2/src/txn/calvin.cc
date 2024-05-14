@@ -387,7 +387,8 @@ void TxnProcessor::CalvinEpochExecutor() {
       while (!root_txns->empty()) {
         txn = root_txns->front();
         root_txns->pop();
-        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+        calvin_ready_txns_.Push(txn);
+        // tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
         // calvin_ready_txns_.Push(txn);
         //        calvin_ready_txns_.
       }
