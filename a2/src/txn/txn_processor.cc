@@ -74,15 +74,19 @@ TxnProcessor::~TxnProcessor() {
   // Wait for the scheduler thread to join back before destroying the object and
   // its thread pool.
   stopped_ = true;
-  pthread_join(scheduler_thread_, NULL);
-  pthread_join(calvin_sequencer_thread, NULL);
 
-  if(current_epoch_dag != NULL) {
-    delete current_epoch_dag->adj_list;
-    delete current_epoch_dag->indegree;
-    delete current_epoch_dag->root_txns;
-    free(current_epoch_dag);
+  if(mode_ == CALVIN_EPOCH) {
+    pthread_join(calvin_sequencer_thread, NULL);
+    if(current_epoch_dag != NULL) {
+      delete current_epoch_dag->adj_list;
+      delete current_epoch_dag->indegree;
+      delete current_epoch_dag->root_txns;
+      free(current_epoch_dag);
+    }
   }
+  pthread_join(scheduler_thread_, NULL);
+
+
 
   if (mode_ == LOCKING_EXCLUSIVE_ONLY || mode_ == LOCKING)
     delete lm_;

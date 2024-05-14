@@ -288,8 +288,8 @@ void TxnProcessor::RunCalvinEpochScheduler() {
   pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
                  reinterpret_cast<void *>(this));
   //   Start Calvin Epoch Executor
-  pthread_create(&calvin_epoch_executor_thread, NULL,
-                 calvin_epoch_executor_helper, reinterpret_cast<void *>(this));
+  // pthread_create(&calvin_epoch_executor_thread, NULL,
+  //                calvin_epoch_executor_helper, reinterpret_cast<void *>(this));
   // for(int i = 0; i < THREAD_COUNT; i++) {
   //   tp_.AddTask([this]() { this->CalvinEpochExecutorLMAO(); });
   // }
@@ -363,7 +363,8 @@ void TxnProcessor::RunCalvinEpochScheduler() {
       //      dag->indegree_locks = indegree_locks;
 
       // push dag to queue for executor to read
-      epoch_dag_queue.Push(dag);
+      // epoch_dag_queue.Push(dag);
+      CalvinExecuteSingleEpoch(dag);
     }
   }
 }
@@ -406,6 +407,40 @@ void TxnProcessor::CalvinEpochExecutor() {
       current_epoch_dag = NULL;
     }
   }
+}
+
+void TxnProcessor::CalvinExecuteSingleEpoch(EpochDag* epoch_dag) {
+  num_txns_left_in_epoch = 0;
+  // if (num_txns_left_in_epoch != 0) {
+  //   std::cout << "Num transactions in epoch: " << num_txns_left_in_epoch
+  //             << std::endl;
+  //   std::cout << "UH OH--------------------------------UH OH" << std::endl;
+  // }
+  current_epoch_dag = epoch_dag;
+  num_txns_left_in_epoch = current_epoch_dag->adj_list->size();
+  Txn *txn;
+  std::queue<Txn *> *root_txns = current_epoch_dag->root_txns;
+
+  // add all root txns to threadpool
+  while (!root_txns->empty()) {
+    txn = root_txns->front();
+    root_txns->pop();
+    calvin_ready_txns_.Push(txn);
+  }
+
+  // wait for epoch to end executing
+  int sleep_duration = 1; // in microseconds
+  while (num_txns_left_in_epoch > 0) {
+    usleep(sleep_duration);
+    // Back off exponentially.
+    if (sleep_duration < 32)
+      sleep_duration *= 2;
+  }
+  delete current_epoch_dag->adj_list;
+  delete current_epoch_dag->indegree;
+  delete current_epoch_dag->root_txns;
+  free(current_epoch_dag);
+  current_epoch_dag = NULL;
 }
 
 void *TxnProcessor::calvin_epoch_executor_helper(void *arg) {
