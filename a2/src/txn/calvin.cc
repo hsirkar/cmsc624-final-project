@@ -68,8 +68,7 @@ void TxnProcessor::RunCalvinContScheduler() {
 
       // If current transaction's indegree is 0, add it to the threadpool
       if (ind == 0) {
-        // tp_.AddTask([this, txn]() { this->ExecuteTxnCalvin(txn); });
-        calvin_ready_txns_.Push(txn);
+        tp_->AddTask([this, txn]() { this->CalvinContExecutorFunc(txn); });
       } else {
         // Otherwise, add it to the indegree hashmap
         indegree[txn] = ind;
@@ -80,45 +79,41 @@ void TxnProcessor::RunCalvinContScheduler() {
   }
 }
 
-void TxnProcessor::CalvinContExecutorFunc() {
-  Txn *txn;
-  while (!stopped_) {
-    if (calvin_ready_txns_.Pop(&txn)) {
-      // Execute txn.
-      ExecuteTxn(txn);
+void TxnProcessor::CalvinContExecutorFunc(Txn* txn) {
 
-      // Commit/abort txn according to program logic's commit/abort decision.
-      // Note: we do this within the worker thread instead of returning
-      // back to the scheduler thread.
-      if (txn->Status() == COMPLETED_C) {
-        ApplyWrites(txn);
-        committed_txns_.Push(txn);
-        txn->status_ = COMMITTED;
-      } else if (txn->Status() == COMPLETED_A) {
-        txn->status_ = ABORTED;
-      } else {
-        // Invalid TxnStatus!
-        DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
-      }
+  // Execute txn.
+  ExecuteTxn(txn);
 
-      // Update indegrees of neighbors
-      // If any has indegree 0, add them back to the queue
-      // if (adj_list.find(txn) != adj_list.end()) {
-      std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
-      std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
+  // Commit/abort txn according to program logic's commit/abort decision.
+  // Note: we do this within the worker thread instead of returning
+  // back to the scheduler thread.
+  if (txn->Status() == COMPLETED_C) {
+    ApplyWrites(txn);
+    committed_txns_.Push(txn);
+    txn->status_ = COMMITTED;
+  } else if (txn->Status() == COMPLETED_A) {
+    txn->status_ = ABORTED;
+  } else {
+    // Invalid TxnStatus!
+    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+  }
 
-      auto neighbors = adj_list[txn];
-      for (auto nei : neighbors) {
-        indegree[nei]--;
-        if (indegree[nei] == 0) {
-          calvin_ready_txns_.Push(nei);
-        }
-      }
+  // Update indegrees of neighbors
+  // If any has indegree 0, add them back to the queue
+  // if (adj_list.find(txn) != adj_list.end()) {
+  std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
+  std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
 
-      // Return result to client.
-      txn_results_.Push(txn);
+  auto neighbors = adj_list[txn];
+  for (auto nei : neighbors) {
+    indegree[nei]--;
+    if (indegree[nei] == 0) {
+      tp_->AddTask([this, nei]() { this->CalvinContExecutorFunc(nei); });
     }
   }
+
+  // Return result to client.
+  txn_results_.Push(txn);
 }
 
 /***********************************************
@@ -194,54 +189,49 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
 
       // If current transaction's indegree is 0, add it to the threadpool
       if (txn->indegree == 0) {
-        calvin_ready_txns_.Push(txn);
+        tp_->AddTask([this, txn]() { this->CalvinContIndivExecutorFunc(txn); });
       }
       txn->indegree_mutex.unlock();
     }
   }
 }
 
-void TxnProcessor::CalvinContIndivExecutorFunc() {
-  Txn *txn;
-  while (!stopped_) {
-    if (calvin_ready_txns_.Pop(&txn)) {
-      // Execute txn.
-      ExecuteTxn(txn);
+void TxnProcessor::CalvinContIndivExecutorFunc(Txn* txn) {
+  // Execute txn.
+  ExecuteTxn(txn);
 
-      // Commit/abort txn according to program logic's commit/abort decision.
-      // Note: we do this within the worker thread instead of returning
-      // back to the scheduler thread.
-      if (txn->Status() == COMPLETED_C) {
-        ApplyWrites(txn);
-        committed_txns_.Push(txn);
-        txn->status_ = COMMITTED;
-      } else if (txn->Status() == COMPLETED_A) {
-        txn->status_ = ABORTED;
-      } else {
-        // Invalid TxnStatus!
-        DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
-      }
-
-      // Update indegrees of neighbors
-      txn->neighbors_mutex.lock();
-      std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(),
-                                          txn->neighbors.end());
-      txn->neighbors_mutex.unlock();
-      std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
-
-      for (Txn *nei : sorted_neighbors) {
-        nei->indegree_mutex.lock();
-        nei->indegree--;
-        if (nei->indegree == 0) {
-          calvin_ready_txns_.Push(nei);
-        }
-        nei->indegree_mutex.unlock();
-      }
-
-      // Return result to client.
-      txn_results_.Push(txn);
-    }
+  // Commit/abort txn according to program logic's commit/abort decision.
+  // Note: we do this within the worker thread instead of returning
+  // back to the scheduler thread.
+  if (txn->Status() == COMPLETED_C) {
+    ApplyWrites(txn);
+    committed_txns_.Push(txn);
+    txn->status_ = COMMITTED;
+  } else if (txn->Status() == COMPLETED_A) {
+    txn->status_ = ABORTED;
+  } else {
+    // Invalid TxnStatus!
+    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
   }
+
+  // Update indegrees of neighbors
+  txn->neighbors_mutex.lock();
+  std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(),
+                                      txn->neighbors.end());
+  txn->neighbors_mutex.unlock();
+  std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
+
+  for (Txn *nei : sorted_neighbors) {
+    nei->indegree_mutex.lock();
+    nei->indegree--;
+    if (nei->indegree == 0) {
+      tp_->AddTask([this, nei]() { this->CalvinContIndivExecutorFunc(nei); });
+    }
+    nei->indegree_mutex.unlock();
+  }
+
+  // Return result to client.
+  txn_results_.Push(txn);
 }
 
 /***********************************************
@@ -282,19 +272,11 @@ void *TxnProcessor::calvin_sequencer_helper(void *arg) {
   return NULL;
 }
 
-
-
 void TxnProcessor::RunCalvinEpochScheduler() {
 
   // Start Calvin Sequencer
   pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
                  reinterpret_cast<void *>(this));
-  //   Start Calvin Epoch Executor
-  // pthread_create(&calvin_epoch_executor_thread, NULL,
-  //                calvin_epoch_executor_helper, reinterpret_cast<void *>(this));
-  // for(int i = 0; i < THREAD_COUNT; i++) {
-  //   tp_.AddTask([this]() { this->CalvinEpochExecutorLMAO(); });
-  // }
 
   Epoch *curr_epoch;
   EpochDag *dag;
@@ -362,10 +344,6 @@ void TxnProcessor::RunCalvinEpochScheduler() {
       dag->adj_list = adj_list;
       dag->indegree = indegree;
       dag->root_txns = root_txns;
-      //      dag->indegree_locks = indegree_locks;
-
-      // push dag to queue for executor to read
-      // epoch_dag_queue.Push(dag);
       CalvinExecuteSingleEpoch(dag);
     }
   }
@@ -388,10 +366,7 @@ void TxnProcessor::CalvinEpochExecutor() {
       while (!root_txns->empty()) {
         txn = root_txns->front();
         root_txns->pop();
-        calvin_ready_txns_.Push(txn);
-        // tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
-        // calvin_ready_txns_.Push(txn);
-        //        calvin_ready_txns_.
+        tp_->AddTask([this, txn]() { this->CalvinEpochExecutorFunc(txn); });
       }
 
       // wait for epoch to end executing
@@ -450,41 +425,36 @@ void *TxnProcessor::calvin_epoch_executor_helper(void *arg) {
   return NULL;
 }
 
-void TxnProcessor::CalvinEpochExecutorFunc() {
-  Txn *txn;
-  while (!stopped_) {
-    // Get the next new transaction request (if one is pending) and pass it to
-    // an execution thread that executes the txn logic *and also* does the
-    // validation and write phases.
-    if (calvin_ready_txns_.Pop(&txn)) {
-      ExecuteTxn(txn);
+void TxnProcessor::CalvinEpochExecutorFunc(Txn* txn) {
+  // Get the next new transaction request (if one is pending) and pass it to
+  // an execution thread that executes the txn logic *and also* does the
+  // validation and write phases.
+  ExecuteTxn(txn);
 
-      // Commit/abort txn according to program logic's commit/abort decision.
-      // Note: we do this within the worker thread instead of returning
-      // back to the scheduler thread.
-      if (txn->Status() == COMPLETED_C) {
-        ApplyWrites(txn);
-        committed_txns_.Push(txn);
-        txn->status_ = COMMITTED;
-      } else if (txn->Status() == COMPLETED_A) {
-        txn->status_ = ABORTED;
-      } else {
-        // Invalid TxnStatus!
-        DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
-      }
+  // Commit/abort txn according to program logic's commit/abort decision.
+  // Note: we do this within the worker thread instead of returning
+  // back to the scheduler thread.
+  if (txn->Status() == COMPLETED_C) {
+    ApplyWrites(txn);
+    committed_txns_.Push(txn);
+    txn->status_ = COMMITTED;
+  } else if (txn->Status() == COMPLETED_A) {
+    txn->status_ = ABORTED;
+  } else {
+    // Invalid TxnStatus!
+    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+  }
 
-      // Update indegrees of neighbors
-      // If any has indegree 0, add them back to the queue
-      auto neighbors = current_epoch_dag->adj_list->at(txn);
-      for (Txn *blocked_txn : neighbors) {
-        if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
-          calvin_ready_txns_.Push(blocked_txn);
-        }
-      }
-      num_txns_left_in_epoch--;
-
-      // Return result to client.
-      txn_results_.Push(txn);
+  // Update indegrees of neighbors
+  // If any has indegree 0, add them back to the queue
+  auto neighbors = current_epoch_dag->adj_list->at(txn);
+  for (Txn *blocked_txn : neighbors) {
+    if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
+      tp_->AddTask([this, blocked_txn]() { this->CalvinEpochExecutorFunc(blocked_txn); });
     }
   }
+  num_txns_left_in_epoch--;
+
+  // Return result to client.
+  txn_results_.Push(txn);
 }

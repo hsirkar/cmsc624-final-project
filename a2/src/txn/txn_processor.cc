@@ -11,7 +11,15 @@
 #define THREAD_COUNT 8
 
 TxnProcessor::TxnProcessor(CCMode mode)
-    : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
+    : mode_(mode), next_unique_id_(1) {
+
+  if(mode_ >= CALVIN_CONT) {
+    // This needs to be changed for work stealing thread pool
+    tp_ = new StaticThreadPool(THREAD_COUNT);
+  } else {
+    tp_ = new StaticThreadPool(THREAD_COUNT);
+  }
+
   if (mode_ == LOCKING_EXCLUSIVE_ONLY)
     lm_ = new LockManagerA(&ready_txns_);
   else if (mode_ == LOCKING)
@@ -47,22 +55,8 @@ TxnProcessor::TxnProcessor(CCMode mode)
   stopped_ = false;
   scheduler_thread_ = scheduler_;
 
-  // For all Calvin executions, start the proper ExecutorFunc
-  if (mode_ >= CALVIN_CONT) {
-    for (int i = 0; i < THREAD_COUNT; i++) {
-      switch (mode_) {
-      case CALVIN_CONT:
-        tp_.AddTask([this]() { this->CalvinContExecutorFunc(); });
-        break;
-      case CALVIN_CONT_INDIV:
-        tp_.AddTask([this]() { this->CalvinContIndivExecutorFunc(); });
-        break;
-      case CALVIN_EPOCH:
-        tp_.AddTask([this]() { this->CalvinEpochExecutorFunc(); });
-        break;
-      }
-    }
-  }
+  current_epoch_dag = NULL;
+
 }
 
 void *TxnProcessor::StartScheduler(void *arg) {
@@ -238,7 +232,7 @@ void TxnProcessor::RunLockingScheduler() {
       ready_txns_.pop_front();
 
       // Start txn running in its own thread.
-      tp_.AddTask([this, txn]() { this->ExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxn(txn); });
     }
   }
 }
@@ -286,7 +280,7 @@ void TxnProcessor::RunOCCScheduler() {
     // Get the next new txn request (if one is pending)
     if (txn_requests_.Pop(&txn)) {
       // Pass it to an execution thread
-      tp_.AddTask([this, txn]() { this->ExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxn(txn); });
     }
 
     // Dealing with a finished transaction
@@ -473,7 +467,7 @@ void TxnProcessor::RunOCCParallelScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
     }
   }
 }
@@ -571,7 +565,7 @@ void TxnProcessor::RunMVCCScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->MVCCExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->MVCCExecuteTxn(txn); });
     }
   }
 }
@@ -664,7 +658,7 @@ void TxnProcessor::RunMVCCSSIScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->MVCCSSIExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->MVCCSSIExecuteTxn(txn); });
     }
   }
 }

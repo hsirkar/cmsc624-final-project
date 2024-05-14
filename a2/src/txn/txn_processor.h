@@ -87,13 +87,13 @@ private:
   std::shared_mutex indegree_lock;
 
   void RunCalvinContScheduler();
-  void CalvinContExecutorFunc();
+  void CalvinContExecutorFunc(Txn* txn);
 
   /***********************************************
   *  Calvin Continuous Execution -- Indiv Locks  *
   ***********************************************/
   void RunCalvinContIndivScheduler();
-  void CalvinContIndivExecutorFunc();
+  void CalvinContIndivExecutorFunc(Txn* txn);
 
   /***********************************************
   *            Calvin Epoch Execution            *
@@ -130,10 +130,8 @@ private:
   // helper function to call calvin epoch executor in pthread
   static void *calvin_epoch_executor_helper(void *arg);
 
-  void CalvinEpochExecutorFunc();
+  void CalvinEpochExecutorFunc(Txn* txn);
   void CalvinExecuteSingleEpoch(EpochDag* epoch_dag);
-
-  bool use_thread_pool = true;
 
   // ===================== END OF CALVIN =======================
 
@@ -190,7 +188,7 @@ private:
   CCMode mode_;
 
   // Thread pool managing all threads used by TxnProcessor.
-  StaticThreadPool tp_;
+  ThreadPool* tp_;
 
   // Data storage used for all modes.
   Storage *storage_;
