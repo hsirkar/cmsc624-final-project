@@ -31,6 +31,8 @@ TxnProcessor::TxnProcessor(CCMode mode) : mode_(mode), next_unique_id_(1) {
     storage_ = new Storage();
   }
 
+  current_epoch_dag = NULL;
+
   storage_->InitStorage();
 
   // Start 'RunScheduler()' running.
@@ -84,7 +86,7 @@ TxnProcessor::~TxnProcessor() {
   pthread_join(scheduler_thread_, NULL);
   pthread_join(calvin_sequencer_thread, NULL);
 
-  if(current_epoch_dag != NULL) {
+  if (current_epoch_dag != NULL) {
     delete current_epoch_dag->adj_list;
     delete current_epoch_dag->indegree;
     delete current_epoch_dag->root_txns;
