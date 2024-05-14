@@ -2,6 +2,7 @@
 #define _TXN_H_
 
 #include <map>
+#include <mutex>
 #include <set>
 #include <vector>
 
@@ -94,6 +95,12 @@ protected:
 
   // Transaction's current execution status.
   TxnStatus status_;
+
+  std::mutex neighbors_mutex;
+  set<Txn *> neighbors;
+
+  std::mutex indegree_mutex;
+  int indegree;
 
   // Unique, monotonically increasing transaction ID, assigned by TxnProcessor.
   uint64 unique_id_;
