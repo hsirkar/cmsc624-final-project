@@ -8,29 +8,21 @@
 #include "lock_manager.h"
 
 // Calvin Continuous Execution -- Global Locks
-void TxnProcessor::CalvinContStartWorkers() {
-
-}
-
 void TxnProcessor::RunCalvinContScheduler() {
 
 }
 
 void TxnProcessor::CalvinContExecutorFunc() {
-
+  std::cout << "Calvin Continuous Executor Function" << std::endl;
 }
 
 // Calvin Continuous Execution -- Individual Locks
-void TxnProcessor::CalvinContIndivStartWorkers() {
-
-}
-
 void TxnProcessor::RunCalvinContIndivScheduler() {
-
+  
 }
 
 void TxnProcessor::CalvinContIndivExecutorFunc() {
-
+  std::cout << "Calvin Continuous Individual Executor Function" << std::endl;
 }
 
 // Calvin Epoch Execution
@@ -42,14 +34,10 @@ void TxnProcessor::RunCalvinEpochSequencer() {
     
 }
 
-void TxnProcessor::CalvinEpochStartWorkers() {
-
-}
-
 void TxnProcessor::RunCalvinEpochScheduler() {
 
 }
 
 void TxnProcessor::CalvinEpochExecutorFunc() {
-
+  std::cout << "Calvin Epoch Executor Function" << std::endl;
 }

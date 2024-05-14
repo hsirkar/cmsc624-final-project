@@ -47,12 +47,22 @@ TxnProcessor::TxnProcessor(CCMode mode)
   stopped_ = false;
   scheduler_thread_ = scheduler_;
 
-  // Start CalvinExecutorFunc in all the threads
-  // if (mode_ == CALVIN) {
-  //   for (int i = 0; i < THREAD_COUNT; i++) {
-  //     tp_.AddTask([this]() { this->CalvinExecutorFunc(); });
-  //   }
-  // }
+  // For all Calvin executions, start the proper ExecutorFunc
+  if (mode_ >= CALVIN_CONT) {
+    for (int i = 0; i < THREAD_COUNT; i++) {
+      switch (mode_) {
+      case CALVIN_CONT:
+        tp_.AddTask([this]() { this->CalvinContExecutorFunc(); });
+        break;
+      case CALVIN_CONT_INDIV:
+        tp_.AddTask([this]() { this->CalvinContIndivExecutorFunc(); });
+        break;
+      case CALVIN_EPOCH:
+        tp_.AddTask([this]() { this->CalvinEpochExecutorFunc(); });
+        break;
+      }
+    }
+  }
 }
 
 void *TxnProcessor::StartScheduler(void *arg) {

@@ -73,12 +73,10 @@ private:
   // ===================== START OF CALVIN =====================
 
   // Calvin Continuous Execution -- Global Locks
-  void CalvinContStartWorkers();
   void RunCalvinContScheduler();
   void CalvinContExecutorFunc();
 
   // Calvin Continuous Execution -- Individual Locks
-  void CalvinContIndivStartWorkers();
   void RunCalvinContIndivScheduler();
   void CalvinContIndivExecutorFunc();
 
@@ -110,7 +108,6 @@ private:
   void RunCalvinEpochScheduler();
 
   // 3) Executor
-  void CalvinEpochStartWorkers();
   void CalvinEpochExecutorFunc();
 
   // ===================== END OF CALVIN =======================
