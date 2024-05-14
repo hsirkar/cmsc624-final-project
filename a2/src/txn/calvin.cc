@@ -295,7 +295,7 @@ void TxnProcessor::RunCalvinEpochScheduler() {
   // }
 
   Epoch *curr_epoch;
-  EpochDag *dag;
+  std::shared_ptr<EpochDag> dag;
   while (!stopped_) {
     // Get the next epoch
     if (epoch_queue.Pop(&curr_epoch)) {
@@ -303,7 +303,7 @@ void TxnProcessor::RunCalvinEpochScheduler() {
       std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
       std::unordered_map<Key, Txn *> last_excl;
 
-      dag = (EpochDag *)malloc(sizeof(EpochDag));
+      dag = std::make_shared<EpochDag>();
 
       std::unordered_map<Txn *, std::unordered_set<Txn *>> *adj_list =
           new std::unordered_map<Txn *, std::unordered_set<Txn *>>();
@@ -399,11 +399,6 @@ void TxnProcessor::CalvinEpochExecutor() {
         if (sleep_duration < 32)
           sleep_duration *= 2;
       }
-      delete current_epoch_dag->adj_list;
-      delete current_epoch_dag->indegree;
-      delete current_epoch_dag->root_txns;
-      free(current_epoch_dag);
-      current_epoch_dag = NULL;
     }
   }
 }

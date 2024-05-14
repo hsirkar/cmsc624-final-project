@@ -72,12 +72,11 @@ public:
   void CalvinEpochExecutor();
 
 private:
-
   // ===================== START OF CALVIN =====================
 
   /***********************************************
-  *  Calvin Continuous Execution -- Global Locks *
-  ***********************************************/
+   *  Calvin Continuous Execution -- Global Locks *
+   ***********************************************/
   std::unordered_map<Txn *, std::unordered_set<Txn *>> adj_list;
   std::unordered_map<Txn *, std::atomic<int>>
       indegree; // indegree needs to be atomic
@@ -90,14 +89,14 @@ private:
   void CalvinContExecutorFunc();
 
   /***********************************************
-  *  Calvin Continuous Execution -- Indiv Locks  *
-  ***********************************************/
+   *  Calvin Continuous Execution -- Indiv Locks  *
+   ***********************************************/
   void RunCalvinContIndivScheduler();
   void CalvinContIndivExecutorFunc();
 
   /***********************************************
-  *            Calvin Epoch Execution            *
-  ***********************************************/
+   *            Calvin Epoch Execution            *
+   ***********************************************/
   // 1) Sequencer
 
   // thread for calvin sequencer
@@ -108,7 +107,7 @@ private:
   typedef std::queue<Txn *> Epoch;
   // queue of epochs for calvin scheduler
   AtomicQueue<Epoch *> epoch_queue;
-  
+
   // void RunCalvinEpochSequencer();
   // helper function for pthreads
   static void *calvin_sequencer_helper(void *arg);
@@ -119,8 +118,8 @@ private:
     std::unordered_map<Txn *, std::atomic<int>> *indegree;
     std::queue<Txn *> *root_txns;
   };
-  EpochDag *current_epoch_dag;
-  AtomicQueue<EpochDag *> epoch_dag_queue;
+  std::shared_ptr<EpochDag> current_epoch_dag;
+  AtomicQueue<std::shared_ptr<EpochDag>> epoch_dag_queue;
   std::atomic<uint> num_txns_left_in_epoch;
   pthread_cond_t epoch_finished_cond;
   pthread_mutex_t epoch_finished_mutex;
@@ -187,10 +186,10 @@ private:
   CCMode mode_;
 
   // Thread pool managing all threads used by TxnProcessor.
-  StaticThreadPool tp_;
+  std::shared_ptr<StaticThreadPool> tp_;
 
   // Data storage used for all modes.
-  Storage *storage_;
+  std::shared_ptr<Storage> storage_;
 
   // Next valid unique_id, and a mutex to guard incoming txn requests.
   int next_unique_id_;
@@ -226,7 +225,7 @@ private:
   Mutex active_set_mutex_;
 
   // Lock Manager used for LOCKING concurrency implementations.
-  LockManager *lm_;
+  std::shared_ptr<LockManager> lm_;
 
   // Used for stopping the continuous loop that runs in the scheduler thread
   bool stopped_;

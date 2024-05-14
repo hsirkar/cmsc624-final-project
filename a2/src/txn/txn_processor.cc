@@ -1,27 +1,28 @@
-#include "txn_processor.h"
-#include "utils/common.h"
-#include <chrono>
 #include <set>
 #include <stdio.h>
-#include <unordered_set>
 
 #include "lock_manager.h"
+#include "txn_processor.h"
+#include "utils/common.h"
 
 // Thread & queue counts for StaticThreadPool initialization.
 #define THREAD_COUNT 8
 
-TxnProcessor::TxnProcessor(CCMode mode)
-    : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
+TxnProcessor::TxnProcessor(CCMode mode) : mode_(mode), next_unique_id_(1) {
+
+  tp_ = std::make_shared<StaticThreadPool>(THREAD_COUNT);
+
+  // Create the locking manager
   if (mode_ == LOCKING_EXCLUSIVE_ONLY)
-    lm_ = new LockManagerA(&ready_txns_);
+    lm_ = std::make_shared<LockManagerA>(&ready_txns_);
   else if (mode_ == LOCKING)
-    lm_ = new LockManagerB(&ready_txns_);
+    lm_ = std::make_shared<LockManagerB>(&ready_txns_);
 
   // Create the storage
   if (mode_ == MVCC || mode_ == MVCC_SSI) {
-    storage_ = new MVCCStorage();
+    storage_ = std::make_shared<MVCCStorage>();
   } else {
-    storage_ = new Storage();
+    storage_ = std::make_shared<Storage>();
   }
 
   storage_->InitStorage();
@@ -52,13 +53,13 @@ TxnProcessor::TxnProcessor(CCMode mode)
     for (int i = 0; i < THREAD_COUNT; i++) {
       switch (mode_) {
       case CALVIN_CONT:
-        tp_.AddTask([this]() { this->CalvinContExecutorFunc(); });
+        tp_->AddTask([this]() { this->CalvinContExecutorFunc(); });
         break;
       case CALVIN_CONT_INDIV:
-        tp_.AddTask([this]() { this->CalvinContIndivExecutorFunc(); });
+        tp_->AddTask([this]() { this->CalvinContIndivExecutorFunc(); });
         break;
       case CALVIN_EPOCH:
-        tp_.AddTask([this]() { this->CalvinEpochExecutorFunc(); });
+        tp_->AddTask([this]() { this->CalvinEpochExecutorFunc(); });
         break;
       }
     }
@@ -71,23 +72,9 @@ void *TxnProcessor::StartScheduler(void *arg) {
 }
 
 TxnProcessor::~TxnProcessor() {
-  // Wait for the scheduler thread to join back before destroying the object and
-  // its thread pool.
   stopped_ = true;
   pthread_join(scheduler_thread_, NULL);
   pthread_join(calvin_sequencer_thread, NULL);
-
-  if(current_epoch_dag != NULL) {
-    delete current_epoch_dag->adj_list;
-    delete current_epoch_dag->indegree;
-    delete current_epoch_dag->root_txns;
-    free(current_epoch_dag);
-  }
-
-  if (mode_ == LOCKING_EXCLUSIVE_ONLY || mode_ == LOCKING)
-    delete lm_;
-
-  delete storage_;
 }
 
 void TxnProcessor::NewTxnRequest(Txn *txn) {
@@ -234,7 +221,7 @@ void TxnProcessor::RunLockingScheduler() {
       ready_txns_.pop_front();
 
       // Start txn running in its own thread.
-      tp_.AddTask([this, txn]() { this->ExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxn(txn); });
     }
   }
 }
@@ -282,7 +269,7 @@ void TxnProcessor::RunOCCScheduler() {
     // Get the next new txn request (if one is pending)
     if (txn_requests_.Pop(&txn)) {
       // Pass it to an execution thread
-      tp_.AddTask([this, txn]() { this->ExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxn(txn); });
     }
 
     // Dealing with a finished transaction
@@ -469,7 +456,7 @@ void TxnProcessor::RunOCCParallelScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
+      tp_->AddTask([this, txn]() { this->ExecuteTxnParallel(txn); });
     }
   }
 }
@@ -511,7 +498,8 @@ void TxnProcessor::MVCCExecuteTxn(Txn *txn) {
   // Call MVCCStorage::CheckWrite method to check all keys in the write_set_
   bool checkPassed = true;
   for (auto key : txn->writeset_) {
-    if (!((MVCCStorage *)storage_)->CheckKey(key, txn->unique_id_)) {
+    auto st = std::dynamic_pointer_cast<MVCCStorage>(storage_);
+    if (!st->CheckKey(key, txn->unique_id_)) {
       checkPassed = false;
       break;
     }
@@ -567,7 +555,7 @@ void TxnProcessor::RunMVCCScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->MVCCExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->MVCCExecuteTxn(txn); });
     }
   }
 }
@@ -604,7 +592,8 @@ void TxnProcessor::MVCCSSIExecuteTxn(Txn *txn) {
   // Call MVCCStorage::CheckWrite method to check all keys in the write_set_
   bool checkPassed = true;
   for (auto key : txn->writeset_) {
-    if (!((MVCCStorage *)storage_)->CheckKey(key, txn->unique_id_)) {
+    auto st = std::dynamic_pointer_cast<MVCCStorage>(storage_);
+    if (!st->CheckKey(key, txn->unique_id_)) {
       checkPassed = false;
       break;
     }
@@ -660,7 +649,7 @@ void TxnProcessor::RunMVCCSSIScheduler() {
     // an execution thread that executes the txn logic *and also* does the
     // validation and write phases.
     if (txn_requests_.Pop(&txn)) {
-      tp_.AddTask([this, txn]() { this->MVCCSSIExecuteTxn(txn); });
+      tp_->AddTask([this, txn]() { this->MVCCSSIExecuteTxn(txn); });
     }
   }
 }
