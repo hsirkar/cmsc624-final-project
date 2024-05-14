@@ -369,19 +369,17 @@ void TxnProcessor::RunCalvinEpochScheduler() {
 }
 
 void TxnProcessor::CalvinEpochExecutor() {
-  EpochDag *current_epoch;
   num_txns_left_in_epoch = 0;
   while (!stopped_) {
-    if (epoch_dag_queue.Pop(&current_epoch)) {
+    if (epoch_dag_queue.Pop(&current_epoch_dag)) {
       if (num_txns_left_in_epoch != 0) {
         std::cout << "Num transactions in epoch: " << num_txns_left_in_epoch
                   << std::endl;
         std::cout << "UH OH--------------------------------UH OH" << std::endl;
       }
-      current_epoch_dag = current_epoch;
-      num_txns_left_in_epoch = current_epoch->adj_list->size();
+      num_txns_left_in_epoch = current_epoch_dag->adj_list->size();
       Txn *txn;
-      std::queue<Txn *> *root_txns = current_epoch->root_txns;
+      std::queue<Txn *> *root_txns = current_epoch_dag->root_txns;
 
       // add all root txns to threadpool
       while (!root_txns->empty()) {
@@ -401,10 +399,11 @@ void TxnProcessor::CalvinEpochExecutor() {
         if (sleep_duration < 32)
           sleep_duration *= 2;
       }
-      delete current_epoch->adj_list;
-      delete current_epoch->indegree;
-      delete current_epoch->root_txns;
-      free(current_epoch);
+      delete current_epoch_dag->adj_list;
+      delete current_epoch_dag->indegree;
+      delete current_epoch_dag->root_txns;
+      free(current_epoch_dag);
+      current_epoch_dag = NULL;
     }
   }
 }
