@@ -7,7 +7,9 @@
 
 #include "lock_manager.h"
 
-// Calvin Continuous Execution -- Global Locks
+/***********************************************
+*  Calvin Continuous Execution -- Global Locks *
+***********************************************/
 void TxnProcessor::RunCalvinContScheduler() {
 
 }
@@ -16,7 +18,9 @@ void TxnProcessor::CalvinContExecutorFunc() {
   std::cout << "Calvin Continuous Executor Function" << std::endl;
 }
 
-// Calvin Continuous Execution -- Individual Locks
+/***********************************************
+*  Calvin Continuous Execution -- Indiv Locks  *
+***********************************************/
 void TxnProcessor::RunCalvinContIndivScheduler() {
   
 }
@@ -25,7 +29,9 @@ void TxnProcessor::CalvinContIndivExecutorFunc() {
   std::cout << "Calvin Continuous Individual Executor Function" << std::endl;
 }
 
-// Calvin Epoch Execution
+/***********************************************
+*            Calvin Epoch Execution            *
+***********************************************/
 void *TxnProcessor::calvin_sequencer_helper(void *arg) {
   reinterpret_cast<TxnProcessor *>(arg)->RunCalvinEpochSequencer();
   return NULL;

@@ -72,15 +72,21 @@ private:
 
   // ===================== START OF CALVIN =====================
 
-  // Calvin Continuous Execution -- Global Locks
+  /***********************************************
+  *  Calvin Continuous Execution -- Global Locks *
+  ***********************************************/
   void RunCalvinContScheduler();
   void CalvinContExecutorFunc();
 
-  // Calvin Continuous Execution -- Individual Locks
+  /***********************************************
+  *  Calvin Continuous Execution -- Indiv Locks  *
+  ***********************************************/
   void RunCalvinContIndivScheduler();
   void CalvinContIndivExecutorFunc();
 
-  // Calvin Epoch Execution
+  /***********************************************
+  *            Calvin Epoch Execution            *
+  ***********************************************/
   // 1) Sequencer
 
   // thread for calvin sequencer
