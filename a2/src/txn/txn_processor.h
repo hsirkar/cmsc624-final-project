@@ -131,6 +131,7 @@ private:
   static void *calvin_epoch_executor_helper(void *arg);
 
   void CalvinEpochExecutorFunc();
+  void CalvinExecuteSingleEpoch(EpochDag* epoch_dag);
 
   // ===================== END OF CALVIN =======================
 
