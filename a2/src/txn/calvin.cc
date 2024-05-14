@@ -439,14 +439,13 @@ void TxnProcessor::CalvinEpochExecutorFunc() {
 
       // Update indegrees of neighbors
       // If any has indegree 0, add them back to the queue
-      if (num_txns_left_in_epoch-- > 1) {
-        auto neighbors = current_epoch_dag->adj_list->at(txn);
-        for (Txn *blocked_txn : neighbors) {
-          if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
-            calvin_ready_txns_.Push(blocked_txn);
-          }
+      auto neighbors = current_epoch_dag->adj_list->at(txn);
+      for (Txn *blocked_txn : neighbors) {
+        if (current_epoch_dag->indegree->at(blocked_txn)-- == 1) {
+          calvin_ready_txns_.Push(blocked_txn);
         }
       }
+      num_txns_left_in_epoch--;
 
       // Return result to client.
       txn_results_.Push(txn);
