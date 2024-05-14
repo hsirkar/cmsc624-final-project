@@ -133,6 +133,8 @@ private:
   void CalvinEpochExecutorFunc();
   void CalvinExecuteSingleEpoch(EpochDag* epoch_dag);
 
+  bool use_thread_pool = true;
+
   // ===================== END OF CALVIN =======================
 
   // Serial validation
