@@ -34,8 +34,9 @@ enum CCMode {
   P_OCC = 4,                  // Part 3
   MVCC = 5,                   // Part 4
   MVCC_SSI = 6,               // Part 5
-  CALVIN = 7,
-  CALVIN_EPOCH = 8,
+  CALVIN_CONT = 7,
+  CALVIN_CONT_INDIV = 8,
+  CALVIN_EPOCH = 9,
 };
 
 // Returns a human-readable string naming of the providing mode.
@@ -65,41 +66,54 @@ public:
   static void *StartScheduler(void *arg);
 
   // putting calvin sequencer as public for pthread
-  void RunCalvinSequencer();
+  void RunCalvinEpochSequencer();
 
 private:
+
+  // ===================== START OF CALVIN =====================
+
+  // Calvin Continuous Execution -- Global Locks
+  void CalvinContStartWorkers();
+  void RunCalvinContScheduler();
+  void CalvinContExecutorFunc();
+
+  // Calvin Continuous Execution -- Individual Locks
+  void CalvinContIndivStartWorkers();
+  void RunCalvinContIndivScheduler();
+  void CalvinContIndivExecutorFunc();
+
+  // Calvin Epoch Execution
+  // 1) Sequencer
+
   // thread for calvin sequencer
   pthread_t calvin_sequencer_thread;
   // defining epoch for ease of use
   typedef std::queue<Txn *> Epoch;
   // queue of epochs for calvin scheduler
   AtomicQueue<Epoch *> epoch_queue;
-  // helper function to call calvin sequencer in pthread
+  
+  // void RunCalvinEpochSequencer();
+  // helper function for pthreads
   static void *calvin_sequencer_helper(void *arg);
 
-  // Continuously run by each of the worker threads
-  void CalvinExecutorFunc();
-  void RunCalvinScheduler();
-
-  // Calvin Epoch Scheduler
+  // 2) Scheduler
   struct EpochDag {
     std::unordered_map<Txn *, std::unordered_set<Txn *>> *adj_list;
     std::unordered_map<Txn *, std::atomic<int>> *indegree;
     std::queue<Txn *> *root_txns;
   };
-
   EpochDag *current_epoch_dag;
   AtomicQueue<EpochDag *> epoch_dag_queue;
-
-  void ExecuteTxnCalvinEpoch(Txn *txn);
-  void RunCalvinEpochScheduler();
-
   std::atomic<uint> num_txns_left_in_epoch;
-
   pthread_cond_t epoch_finished_cond;
   pthread_mutex_t epoch_finished_mutex;
+  void RunCalvinEpochScheduler();
 
-  void CalvinEpochExecutor();
+  // 3) Executor
+  void CalvinEpochStartWorkers();
+  void CalvinEpochExecutorFunc();
+
+  // ===================== END OF CALVIN =======================
 
   // Serial validation
   bool SerialValidate(Txn *txn);

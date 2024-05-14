@@ -48,11 +48,11 @@ TxnProcessor::TxnProcessor(CCMode mode)
   scheduler_thread_ = scheduler_;
 
   // Start CalvinExecutorFunc in all the threads
-  if (mode_ == CALVIN) {
-    for (int i = 0; i < THREAD_COUNT; i++) {
-      tp_.AddTask([this]() { this->CalvinExecutorFunc(); });
-    }
-  }
+  // if (mode_ == CALVIN) {
+  //   for (int i = 0; i < THREAD_COUNT; i++) {
+  //     tp_.AddTask([this]() { this->CalvinExecutorFunc(); });
+  //   }
+  // }
 }
 
 void *TxnProcessor::StartScheduler(void *arg) {
@@ -113,8 +113,11 @@ void TxnProcessor::RunScheduler() {
   case MVCC:
     RunMVCCScheduler();
     break;
-  case CALVIN:
-    RunCalvinScheduler();
+  case CALVIN_CONT:
+    RunCalvinContScheduler();
+    break;
+  case CALVIN_CONT_INDIV:
+    RunCalvinContIndivScheduler();
     break;
   case CALVIN_EPOCH:
     pthread_create(&calvin_sequencer_thread, NULL, calvin_sequencer_helper,
@@ -250,294 +253,294 @@ void TxnProcessor::ExecuteTxn(Txn *txn) {
   completed_txns_.Push(txn);
 }
 
-void TxnProcessor::RunCalvinSequencer() {
-  Txn *txn;
-  // save time of last epoch for calvin sequencer
-  auto last_epoch_time = std::chrono::high_resolution_clock::now();
-  // set up current epoch
-  Epoch *current_epoch = new Epoch();
-  while (!stopped_) {
-    // Add the txn to the epoch.
-    if (txn_requests_.Pop(&txn)) {
-      current_epoch->push(txn);
-    }
+// void TxnProcessor::RunCalvinSequencer() {
+//   Txn *txn;
+//   // save time of last epoch for calvin sequencer
+//   auto last_epoch_time = std::chrono::high_resolution_clock::now();
+//   // set up current epoch
+//   Epoch *current_epoch = new Epoch();
+//   while (!stopped_) {
+//     // Add the txn to the epoch.
+//     if (txn_requests_.Pop(&txn)) {
+//       current_epoch->push(txn);
+//     }
 
-    // check if we need to close the epoch
-    auto curr_time = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        curr_time - last_epoch_time);
-    if (duration.count() > 10) {
-      // new epoch is out of scope
-      last_epoch_time = curr_time;
+//     // check if we need to close the epoch
+//     auto curr_time = std::chrono::high_resolution_clock::now();
+//     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+//         curr_time - last_epoch_time);
+//     if (duration.count() > 10) {
+//       // new epoch is out of scope
+//       last_epoch_time = curr_time;
 
-      // make new epoch if last epoch has anything in it
-      if (!current_epoch->empty()) {
-        epoch_queue.Push(current_epoch);
-        current_epoch = new Epoch();
-      }
-    }
-  }
-}
+//       // make new epoch if last epoch has anything in it
+//       if (!current_epoch->empty()) {
+//         epoch_queue.Push(current_epoch);
+//         current_epoch = new Epoch();
+//       }
+//     }
+//   }
+// }
 
-void *TxnProcessor::calvin_sequencer_helper(void *arg) {
-  reinterpret_cast<TxnProcessor *>(arg)->RunCalvinSequencer();
-  return NULL;
-}
+// void *TxnProcessor::calvin_sequencer_helper(void *arg) {
+//   reinterpret_cast<TxnProcessor *>(arg)->RunCalvinSequencer();
+//   return NULL;
+// }
 
-void TxnProcessor::CalvinExecutorFunc() {
-  Txn *txn;
-  while (!stopped_) {
-    if (calvin_ready_txns_.Pop(&txn)) {
-      // Execute txn.
-      ExecuteTxn(txn);
+// void TxnProcessor::CalvinContExecutorFunc() {
+//   Txn *txn;
+//   while (!stopped_) {
+//     if (calvin_ready_txns_.Pop(&txn)) {
+//       // Execute txn.
+//       ExecuteTxn(txn);
 
-      // Commit/abort txn according to program logic's commit/abort decision.
-      // Note: we do this within the worker thread instead of returning
-      // back to the scheduler thread.
-      if (txn->Status() == COMPLETED_C) {
-        ApplyWrites(txn);
-        committed_txns_.Push(txn);
-        txn->status_ = COMMITTED;
-      } else if (txn->Status() == COMPLETED_A) {
-        txn->status_ = ABORTED;
-      } else {
-        // Invalid TxnStatus!
-        DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
-      }
+//       // Commit/abort txn according to program logic's commit/abort decision.
+//       // Note: we do this within the worker thread instead of returning
+//       // back to the scheduler thread.
+//       if (txn->Status() == COMPLETED_C) {
+//         ApplyWrites(txn);
+//         committed_txns_.Push(txn);
+//         txn->status_ = COMMITTED;
+//       } else if (txn->Status() == COMPLETED_A) {
+//         txn->status_ = ABORTED;
+//       } else {
+//         // Invalid TxnStatus!
+//         DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+//       }
 
-      // Update indegrees of neighbors
-      txn->neighbors_mutex.lock();
-      std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(),
-                                          txn->neighbors.end());
-      txn->neighbors_mutex.unlock();
-      std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
+//       // Update indegrees of neighbors
+//       txn->neighbors_mutex.lock();
+//       std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(),
+//                                           txn->neighbors.end());
+//       txn->neighbors_mutex.unlock();
+//       std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
 
-      for (Txn *nei : sorted_neighbors) {
-        nei->indegree_mutex.lock();
-        nei->indegree--;
-        if (nei->indegree == 0) {
-          calvin_ready_txns_.Push(nei);
-        }
-        nei->indegree_mutex.unlock();
-      }
+//       for (Txn *nei : sorted_neighbors) {
+//         nei->indegree_mutex.lock();
+//         nei->indegree--;
+//         if (nei->indegree == 0) {
+//           calvin_ready_txns_.Push(nei);
+//         }
+//         nei->indegree_mutex.unlock();
+//       }
 
-      // Return result to client.
-      txn_results_.Push(txn);
-    }
-  }
-}
+//       // Return result to client.
+//       txn_results_.Push(txn);
+//     }
+//   }
+// }
 
-void TxnProcessor::RunCalvinScheduler() {
-  Txn *txn;
+// void TxnProcessor::RunCalvinContScheduler() {
+//   Txn *txn;
 
-  std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
-  std::unordered_map<Key, Txn *> last_excl;
+//   std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
+//   std::unordered_map<Key, Txn *> last_excl;
 
-  while (!stopped_) {
-    if (txn_requests_.Pop(&txn)) {
-      std::vector<Key> sorted_keys;
-      sorted_keys.reserve(txn->readset_.size() + txn->writeset_.size());
-      sorted_keys.insert(sorted_keys.end(), txn->readset_.begin(),
-                         txn->readset_.end());
-      sorted_keys.insert(sorted_keys.end(), txn->writeset_.begin(),
-                         txn->writeset_.end());
-      std::sort(sorted_keys.begin(), sorted_keys.end());
+//   while (!stopped_) {
+//     if (txn_requests_.Pop(&txn)) {
+//       std::vector<Key> sorted_keys;
+//       sorted_keys.reserve(txn->readset_.size() + txn->writeset_.size());
+//       sorted_keys.insert(sorted_keys.end(), txn->readset_.begin(),
+//                          txn->readset_.end());
+//       sorted_keys.insert(sorted_keys.end(), txn->writeset_.begin(),
+//                          txn->writeset_.end());
+//       std::sort(sorted_keys.begin(), sorted_keys.end());
 
-      txn->indegree_mutex.lock();
-      txn->indegree = 0;
-      txn->neighbors.clear();
+//       txn->indegree_mutex.lock();
+//       txn->indegree = 0;
+//       txn->neighbors.clear();
 
-      for (const Key &key : sorted_keys) {
-        // Handle readset
-        if (txn->readset_.count(key)) {
-          if (!shared_holders.contains(key)) {
-            shared_holders[key] = {};
-          }
-          shared_holders[key].insert(txn);
+//       for (const Key &key : sorted_keys) {
+//         // Handle readset
+//         if (txn->readset_.count(key)) {
+//           if (!shared_holders.contains(key)) {
+//             shared_holders[key] = {};
+//           }
+//           shared_holders[key].insert(txn);
 
-          if (last_excl.contains(key) && last_excl[key] != txn) {
-            last_excl[key]->neighbors_mutex.lock();
+//           if (last_excl.contains(key) && last_excl[key] != txn) {
+//             last_excl[key]->neighbors_mutex.lock();
 
-            if (last_excl[key]->Status() != COMMITTED &&
-                last_excl[key]->Status() != ABORTED) {
-              // We came in before CalvinExecutorFunc took "snapshot" of
-              // neighbors
-              txn->indegree++;
-              last_excl[key]->neighbors.insert(txn);
-            }
+//             if (last_excl[key]->Status() != COMMITTED &&
+//                 last_excl[key]->Status() != ABORTED) {
+//               // We came in before CalvinExecutorFunc took "snapshot" of
+//               // neighbors
+//               txn->indegree++;
+//               last_excl[key]->neighbors.insert(txn);
+//             }
 
-            last_excl[key]->neighbors_mutex.unlock();
-          }
-        }
+//             last_excl[key]->neighbors_mutex.unlock();
+//           }
+//         }
 
-        // Handle writeset
-        if (txn->writeset_.count(key)) {
-          if (shared_holders.contains(key)) {
-            for (auto conflicting_txn : shared_holders[key]) {
-              if (conflicting_txn != txn) {
-                conflicting_txn->neighbors_mutex.lock();
+//         // Handle writeset
+//         if (txn->writeset_.count(key)) {
+//           if (shared_holders.contains(key)) {
+//             for (auto conflicting_txn : shared_holders[key]) {
+//               if (conflicting_txn != txn) {
+//                 conflicting_txn->neighbors_mutex.lock();
 
-                if (conflicting_txn->Status() != COMMITTED &&
-                    conflicting_txn->Status() != ABORTED) {
-                  // We came in before CalvinExecutorFunc took "snapshot" of
-                  // neighbors
-                  txn->indegree++;
-                  conflicting_txn->neighbors.insert(txn);
-                }
+//                 if (conflicting_txn->Status() != COMMITTED &&
+//                     conflicting_txn->Status() != ABORTED) {
+//                   // We came in before CalvinExecutorFunc took "snapshot" of
+//                   // neighbors
+//                   txn->indegree++;
+//                   conflicting_txn->neighbors.insert(txn);
+//                 }
 
-                conflicting_txn->neighbors_mutex.unlock();
-              }
-            }
-            shared_holders[key].clear();
-          }
+//                 conflicting_txn->neighbors_mutex.unlock();
+//               }
+//             }
+//             shared_holders[key].clear();
+//           }
 
-          last_excl[key] = txn;
-        }
-      }
+//           last_excl[key] = txn;
+//         }
+//       }
 
-      // If current transaction's indegree is 0, add it to the threadpool
-      if (txn->indegree == 0) {
-        calvin_ready_txns_.Push(txn);
-      }
-      txn->indegree_mutex.unlock();
-    }
-  }
-}
+//       // If current transaction's indegree is 0, add it to the threadpool
+//       if (txn->indegree == 0) {
+//         calvin_ready_txns_.Push(txn);
+//       }
+//       txn->indegree_mutex.unlock();
+//     }
+//   }
+// }
 
-void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
-  // Execute txn.
-  ExecuteTxn(txn);
+// void TxnProcessor::ExecuteTxnCalvinEpoch(Txn *txn) {
+//   // Execute txn.
+//   ExecuteTxn(txn);
 
-  // Commit/abort txn according to program logic's commit/abort decision.
-  // Note: we do this within the worker thread instead of returning
-  // back to the scheduler thread.
-  if (txn->Status() == COMPLETED_C) {
-    ApplyWrites(txn);
-    committed_txns_.Push(txn);
-    txn->status_ = COMMITTED;
-  } else if (txn->Status() == COMPLETED_A) {
-    txn->status_ = ABORTED;
-  } else {
-    // Invalid TxnStatus!
-    DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
-  }
+//   // Commit/abort txn according to program logic's commit/abort decision.
+//   // Note: we do this within the worker thread instead of returning
+//   // back to the scheduler thread.
+//   if (txn->Status() == COMPLETED_C) {
+//     ApplyWrites(txn);
+//     committed_txns_.Push(txn);
+//     txn->status_ = COMMITTED;
+//   } else if (txn->Status() == COMPLETED_A) {
+//     txn->status_ = ABORTED;
+//   } else {
+//     // Invalid TxnStatus!
+//     DIE("Completed Txn has invalid TxnStatus: " << txn->Status());
+//   }
 
-  // update number of transactions left and signal if finished
-  if (num_txns_left_in_epoch == 1) {
-    num_txns_left_in_epoch = 0;
-    pthread_cond_signal(&epoch_finished_cond);
-  } else {
-    num_txns_left_in_epoch--;
-  }
+//   // update number of transactions left and signal if finished
+//   if (num_txns_left_in_epoch == 1) {
+//     num_txns_left_in_epoch = 0;
+//     pthread_cond_signal(&epoch_finished_cond);
+//   } else {
+//     num_txns_left_in_epoch--;
+//   }
 
-  // Update indegrees of neighbors
-  // If any has indegree 0, add them back to the queue
-  auto neighbors = current_epoch_dag->adj_list[0][txn];
-  for (auto blocked_txn : neighbors) {
-    current_epoch_dag->indegree[0][blocked_txn]--;
-    if (current_epoch_dag->indegree[0][blocked_txn] == 0) {
-      tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
-    }
-  }
+//   // Update indegrees of neighbors
+//   // If any has indegree 0, add them back to the queue
+//   auto neighbors = current_epoch_dag->adj_list[0][txn];
+//   for (auto blocked_txn : neighbors) {
+//     current_epoch_dag->indegree[0][blocked_txn]--;
+//     if (current_epoch_dag->indegree[0][blocked_txn] == 0) {
+//       tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+//     }
+//   }
 
-  // Return result to client.
-  txn_results_.Push(txn);
-}
+//   // Return result to client.
+//   txn_results_.Push(txn);
+// }
 
-void TxnProcessor::RunCalvinEpochScheduler() {
-  Epoch *curr_epoch;
-  EpochDag *dag;
-  while (!stopped_) {
-    // Get the next epoch
-    // Execute all transactions in the epoch
-    if (epoch_queue.Pop(&curr_epoch)) {
-      // ...
-      // create new Dag
-      std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
-      std::unordered_map<Key, Txn *> last_excl;
-      dag = (EpochDag *)malloc(sizeof(EpochDag));
-      Txn *txn;
-      std::unordered_map<Txn *, std::unordered_set<Txn *>> *adj_list =
-          new std::unordered_map<Txn *, std::unordered_set<Txn *>>();
-      std::unordered_map<Txn *, std::atomic<int>> *indegree =
-          new std::unordered_map<Txn *, std::atomic<int>>();
-      std::queue<Txn *> *root_txns = new std::queue<Txn *>();
+// void TxnProcessor::RunCalvinEpochScheduler() {
+//   Epoch *curr_epoch;
+//   EpochDag *dag;
+//   while (!stopped_) {
+//     // Get the next epoch
+//     // Execute all transactions in the epoch
+//     if (epoch_queue.Pop(&curr_epoch)) {
+//       // ...
+//       // create new Dag
+//       std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
+//       std::unordered_map<Key, Txn *> last_excl;
+//       dag = (EpochDag *)malloc(sizeof(EpochDag));
+//       Txn *txn;
+//       std::unordered_map<Txn *, std::unordered_set<Txn *>> *adj_list =
+//           new std::unordered_map<Txn *, std::unordered_set<Txn *>>();
+//       std::unordered_map<Txn *, std::atomic<int>> *indegree =
+//           new std::unordered_map<Txn *, std::atomic<int>>();
+//       std::queue<Txn *> *root_txns = new std::queue<Txn *>();
 
-      while (!curr_epoch->empty()) {
-        txn = curr_epoch->front();
-        curr_epoch->pop();
+//       while (!curr_epoch->empty()) {
+//         txn = curr_epoch->front();
+//         curr_epoch->pop();
 
-        // Loop through readset
-        for (const Key &key : txn->readset_) {
-          // Add to shared holders
-          if (!shared_holders.contains(key)) {
-            shared_holders[key] = std::unordered_set<Txn *>();
-          }
-          shared_holders[key].insert(txn);
+//         // Loop through readset
+//         for (const Key &key : txn->readset_) {
+//           // Add to shared holders
+//           if (!shared_holders.contains(key)) {
+//             shared_holders[key] = std::unordered_set<Txn *>();
+//           }
+//           shared_holders[key].insert(txn);
 
-          // If the last_excl txn is not the current txn, add an edge
-          if (last_excl.contains(key) && last_excl[key] != txn &&
-              !adj_list[0][last_excl[key]].contains(txn)) {
-            adj_list[0][last_excl[key]].insert(txn);
-            indegree[0][txn]++;
-          }
-        }
-        // Loop through writeset
-        for (const Key &key : txn->writeset_) {
-          // Add an edge between the current txn and all shared holders
-          if (shared_holders.contains(key)) {
-            for (auto conflicting_txn : shared_holders[key]) {
-              if (conflicting_txn != txn &&
-                  !adj_list[0][conflicting_txn].contains(txn)) {
-                adj_list[0][conflicting_txn].insert(txn);
-                indegree[0][txn]++;
-              }
-            }
-            shared_holders[key].clear();
-          }
-          last_excl[key] = txn;
-        }
+//           // If the last_excl txn is not the current txn, add an edge
+//           if (last_excl.contains(key) && last_excl[key] != txn &&
+//               !adj_list[0][last_excl[key]].contains(txn)) {
+//             adj_list[0][last_excl[key]].insert(txn);
+//             indegree[0][txn]++;
+//           }
+//         }
+//         // Loop through writeset
+//         for (const Key &key : txn->writeset_) {
+//           // Add an edge between the current txn and all shared holders
+//           if (shared_holders.contains(key)) {
+//             for (auto conflicting_txn : shared_holders[key]) {
+//               if (conflicting_txn != txn &&
+//                   !adj_list[0][conflicting_txn].contains(txn)) {
+//                 adj_list[0][conflicting_txn].insert(txn);
+//                 indegree[0][txn]++;
+//               }
+//             }
+//             shared_holders[key].clear();
+//           }
+//           last_excl[key] = txn;
+//         }
 
-        // set as root if indegree of 0
-        if (indegree[0][txn] == 0) {
-          root_txns->push(txn);
-        }
-      }
-      // finalize new epoch dag
-      dag->adj_list = adj_list;
-      dag->indegree = indegree;
-      dag->root_txns = root_txns;
+//         // set as root if indegree of 0
+//         if (indegree[0][txn] == 0) {
+//           root_txns->push(txn);
+//         }
+//       }
+//       // finalize new epoch dag
+//       dag->adj_list = adj_list;
+//       dag->indegree = indegree;
+//       dag->root_txns = root_txns;
 
-      // push dag to queue for executor to read
-      epoch_dag_queue.Push(dag);
-    }
-  }
-}
+//       // push dag to queue for executor to read
+//       epoch_dag_queue.Push(dag);
+//     }
+//   }
+// }
 
-void TxnProcessor::CalvinEpochExecutor() {
-  EpochDag *current_epoch;
-  while (!stopped_) {
-    if (epoch_dag_queue.Pop(&current_epoch)) {
-      num_txns_left_in_epoch = current_epoch->adj_list->size();
-      Txn *txn;
-      std::queue<Txn *> *root_txns = current_epoch->root_txns;
+// void TxnProcessor::CalvinEpochExecutor() {
+//   EpochDag *current_epoch;
+//   while (!stopped_) {
+//     if (epoch_dag_queue.Pop(&current_epoch)) {
+//       num_txns_left_in_epoch = current_epoch->adj_list->size();
+//       Txn *txn;
+//       std::queue<Txn *> *root_txns = current_epoch->root_txns;
 
-      // add all root txns to threadpool
-      while (!root_txns->empty()) {
-        txn = root_txns->front();
-        root_txns->pop();
-        tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
-      }
+//       // add all root txns to threadpool
+//       while (!root_txns->empty()) {
+//         txn = root_txns->front();
+//         root_txns->pop();
+//         tp_.AddTask([this, txn]() { this->ExecuteTxnCalvinEpoch(txn); });
+//       }
 
-      // wait for epoch to end executing
-      pthread_mutex_lock(&epoch_finished_mutex);
-      while (num_txns_left_in_epoch > 0) {
-        pthread_cond_wait(&epoch_finished_cond, &epoch_finished_mutex);
-      }
-      pthread_mutex_unlock(&epoch_finished_mutex);
-    }
-  }
-}
+//       // wait for epoch to end executing
+//       pthread_mutex_lock(&epoch_finished_mutex);
+//       while (num_txns_left_in_epoch > 0) {
+//         pthread_cond_wait(&epoch_finished_cond, &epoch_finished_mutex);
+//       }
+//       pthread_mutex_unlock(&epoch_finished_mutex);
+//     }
+//   }
+// }
 
 void TxnProcessor::ApplyWrites(Txn *txn) {
   // Write buffered writes out to storage.

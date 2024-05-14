@@ -1,3 +1,4 @@
+# set(CMAKE_BUILD_TYPE Debug)
 
 add_library(txn STATIC
     txn/storage.cc
@@ -5,6 +6,7 @@ add_library(txn STATIC
     txn/txn.cc
     txn/txn_processor.cc
     txn/lock_manager.cc
+    txn/calvin.cc
 )
 target_link_libraries(txn PUBLIC Threads::Threads)
 
