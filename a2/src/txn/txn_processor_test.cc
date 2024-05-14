@@ -20,8 +20,10 @@ string ModeToString(CCMode mode) {
     return " OCC-P    ";
   case MVCC:
     return " MVCC     ";
-  case CALVIN:
-    return " Calvin   ";
+  case CALVIN_CONT:
+    return " Calvin-C ";
+  case CALVIN_CONT_INDIV:
+    return "Calvin-CI ";
   case CALVIN_EPOCH:
     return " Calvin-E ";
   default:
@@ -140,6 +142,10 @@ void Benchmark(const vector<LoadGen *> &lg) {
   // For each MODE...
   for (CCMode mode = SERIAL; mode <= CALVIN_EPOCH;
        mode = static_cast<CCMode>(mode + 1)) {
+
+    if (mode == MVCC || mode == MVCC_SSI)
+      continue;
+
     // Print out mode name.
     cout << ModeToString(mode) << flush;
 
