@@ -90,6 +90,9 @@ void TxnProcessor::CalvinContExecutorFunc() {
       // Commit/abort txn according to program logic's commit/abort decision.
       // Note: we do this within the worker thread instead of returning
       // back to the scheduler thread.
+      adj_list_lock.lock();
+      indegree_lock.lock();
+
       if (txn->Status() == COMPLETED_C) {
         ApplyWrites(txn);
         committed_txns_.Push(txn);
@@ -104,8 +107,8 @@ void TxnProcessor::CalvinContExecutorFunc() {
       // Update indegrees of neighbors
       // If any has indegree 0, add them back to the queue
       // if (adj_list.find(txn) != adj_list.end()) {
-      std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
-      std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
+      // std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
+      // std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
 
       auto neighbors = adj_list[txn];
       for (auto nei : neighbors) {
@@ -114,6 +117,9 @@ void TxnProcessor::CalvinContExecutorFunc() {
           calvin_ready_txns_.Push(nei);
         }
       }
+
+      adj_list_lock.unlock();
+      indegree_lock.unlock();
 
       // Return result to client.
       txn_results_.Push(txn);
@@ -145,6 +151,7 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
       txn->neighbors.clear();
 
       for (const Key &key : sorted_keys) {
+        std::cout << "Key: " << key << std::endl;
         // Handle readset
         if (txn->readset_.count(key)) {
           if (!shared_holders.contains(key)) {
