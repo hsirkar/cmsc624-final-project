@@ -188,6 +188,20 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
             shared_holders[key].clear();
           }
 
+          if (last_excl.contains(key) && last_excl[key] != txn) {
+            last_excl[key]->neighbors_mutex.lock();
+
+            if (last_excl[key]->Status() != COMMITTED &&
+                last_excl[key]->Status() != ABORTED) {
+              // We came in before CalvinExecutorFunc took "snapshot" of
+              // neighbors
+              txn->indegree++;
+              last_excl[key]->neighbors.insert(txn);
+            }
+
+            last_excl[key]->neighbors_mutex.unlock();
+          }
+
           last_excl[key] = txn;
         }
       }
