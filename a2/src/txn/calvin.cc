@@ -206,7 +206,7 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
         }
 
         // Handle readset
-        if (txn->readset_.count(key)) {
+        // if (txn->readset_.count(key)) {
           if (!shared_holders.contains(key)) {
             shared_holders[key] = {};
           }
@@ -225,7 +225,7 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
 
             last_excl[key]->neighbors_mutex.unlock();
           }
-        }
+        // }
 
       }
 
