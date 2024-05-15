@@ -91,8 +91,6 @@ void TxnProcessor::CalvinContExecutorFunc() {
       // Commit/abort txn according to program logic's commit/abort decision.
       // Note: we do this within the worker thread instead of returning
       // back to the scheduler thread.
-      adj_list_lock.lock();
-      indegree_lock.lock();
 
       if (txn->Status() == COMPLETED_C) {
         ApplyWrites(txn);
@@ -111,6 +109,8 @@ void TxnProcessor::CalvinContExecutorFunc() {
       // std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
       // std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
 
+      adj_list_lock.lock();
+      indegree_lock.lock();
       auto neighbors = adj_list[txn];
       for (auto nei : neighbors) {
         indegree[nei]--;
