@@ -120,8 +120,10 @@ void TxnProcessor::CalvinContExecutorFunc() {
       // Update indegrees of neighbors
       // If any has indegree 0, add them back to the queue
       // if (adj_list.find(txn) != adj_list.end()) {
-      // std::shared_lock<std::shared_mutex> adj_list_shared_lock(adj_list_lock);
-      // std::shared_lock<std::shared_mutex> indegree_shared_lock(indegree_lock);
+      // std::shared_lock<std::shared_mutex>
+      // adj_list_shared_lock(adj_list_lock);
+      // std::shared_lock<std::shared_mutex>
+      // indegree_shared_lock(indegree_lock);
 
       adj_list_lock.lock();
       indegree_lock.lock();
@@ -151,8 +153,33 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
   std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
   std::unordered_map<Key, Txn *> last_excl;
 
+  // std::cout << "\nstd::vector<Txn> txns{";
+
   while (!stopped_) {
-    if (txn_requests_.Pop(&txn)) {
+    while (txn_requests_.Pop(&txn)) {
+      // // Print read and write sets of transaction
+      // std::cout << "{\"" << txn->unique_id_ << "\", {";
+
+      // // readset
+      // for (auto it = txn->readset_.begin(); it != txn->readset_.end(); ++it)
+      // {
+      //   std::cout << "\"" << *it << "\"";
+      //   if (std::next(it) != txn->readset_.end()) {
+      //     std::cout << ", ";
+      //   }
+      // }
+      // std::cout << "}, {";
+
+      // // writeset
+      // for (auto it = txn->writeset_.begin(); it != txn->writeset_.end();
+      // ++it) {
+      //   std::cout << "\"" << *it << "\"";
+      //   if (std::next(it) != txn->writeset_.end()) {
+      //     std::cout << ", ";
+      //   }
+      // }
+      // std::cout << "}}, \n";
+
       std::vector<Key> sorted_keys;
       sorted_keys.reserve(txn->readset_.size() + txn->writeset_.size());
       sorted_keys.insert(sorted_keys.end(), txn->readset_.begin(),
@@ -167,15 +194,16 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
 
       // for (const Key &key : sorted_keys) {
 
-        // Handle writeset
-        for (const Key &key : txn->writeset_) {
-          if (shared_holders.contains(key)) {
-            for (auto conflicting_txn : shared_holders[key]) {
-              if (conflicting_txn != txn) {
-                conflicting_txn->neighbors_mutex.lock();
+      // Handle writeset
+      for (const Key &key : txn->writeset_) {
+        if (shared_holders.contains(key)) {
+          for (auto conflicting_txn : shared_holders[key]) {
+            if (conflicting_txn != txn) {
+              if (conflicting_txn->neighbors_mutex.try_lock()) {
 
                 if (conflicting_txn->Status() != COMMITTED &&
-                    conflicting_txn->Status() != ABORTED) {
+                    conflicting_txn->Status() != ABORTED &&
+                    !conflicting_txn->neighbors.contains(txn)) {
                   // We came in before CalvinExecutorFunc took "snapshot" of
                   // neighbors
                   txn->indegree++;
@@ -185,58 +213,71 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
                 conflicting_txn->neighbors_mutex.unlock();
               }
             }
-            shared_holders[key].clear();
           }
+          shared_holders[key].clear();
 
-          if (last_excl.contains(key) && last_excl[key] != txn) {
-            last_excl[key]->neighbors_mutex.lock();
-
-            if (last_excl[key]->Status() != COMMITTED &&
-                last_excl[key]->Status() != ABORTED) {
-              // We came in before CalvinExecutorFunc took "snapshot" of
-              // neighbors
-              txn->indegree++;
-              last_excl[key]->neighbors.insert(txn);
-            }
-
-            last_excl[key]->neighbors_mutex.unlock();
-          }
-
-          last_excl[key] = txn;
         }
 
-        // Handle readset
-      auto merged_sets = txn->readset_;
-      merged_sets.insert(txn->writeset_.begin(), txn->writeset_.end());
-        for (const Key &key : merged_sets) {
-          if (!shared_holders.contains(key)) {
-            shared_holders[key] = {};
+        else if (last_excl.contains(key) && last_excl[key] != txn) {
+          // if (last_excl[key]->neighbors_mutex.try_lock()) {
+          if (last_excl[key]->neighbors_mutex.try_lock()) {
+
+          if (last_excl[key]->Status() != COMMITTED &&
+              last_excl[key]->Status() != ABORTED &&
+              !last_excl[key]->neighbors.contains(txn)) {
+            // We came in before CalvinExecutorFunc took "snapshot" of
+            // neighbors
+            txn->indegree++;
+            last_excl[key]->neighbors.insert(txn);
           }
-          shared_holders[key].insert(txn);
 
-          if (last_excl.contains(key) && last_excl[key] != txn) {
-            last_excl[key]->neighbors_mutex.lock();
-
-            if (last_excl[key]->Status() != COMMITTED &&
-                last_excl[key]->Status() != ABORTED) {
-              // We came in before CalvinExecutorFunc took "snapshot" of
-              // neighbors
-              txn->indegree++;
-              last_excl[key]->neighbors.insert(txn);
-            }
-
-            last_excl[key]->neighbors_mutex.unlock();
+          last_excl[key]->neighbors_mutex.unlock();
           }
         }
 
+        last_excl[key] = txn;
+      }
+      // we never use this
+      // printf("Length of conflicting txns: %d\n", conflicting_txns);
+
+      // Handle readset
+      for (const Key &key : txn->readset_) {
+        if (!shared_holders.contains(key)) {
+          shared_holders[key] = {};
+        }
+        // printf("Adding txn %d to shared holders for key %d\n",
+        // txn->unique_id_, key);
+        shared_holders[key].insert(txn);
+
+        if (last_excl.contains(key) && last_excl[key] != txn) {
+          if (last_excl[key]->neighbors_mutex.try_lock()) {
+
+          if (last_excl[key]->Status() != COMMITTED &&
+              last_excl[key]->Status() != ABORTED &&
+              !last_excl[key]->neighbors.contains(txn)) {
+            // We came in before CalvinExecutorFunc took "snapshot" of
+            // neighbors
+            txn->indegree++;
+            last_excl[key]->neighbors.insert(txn);
+          }
+
+          last_excl[key]->neighbors_mutex.unlock();
+          }
+        }
+      }
 
       // }
+
+      // Print using C-style
+      // printf("Scheduler indegree for transaction %d: %d\n", txn->unique_id_,
+      // txn->indegree);
 
       // If current transaction's indegree is 0, add it to the threadpool
       if (txn->indegree == 0) {
         calvin_ready_txns_.Push(txn);
       }
       txn->indegree_mutex.unlock();
+      // printf("Cleared indegree mutex for txn %d\n", txn->unique_id_);
     }
   }
 }
@@ -246,6 +287,7 @@ void TxnProcessor::CalvinContIndivExecutorFunc() {
   while (!stopped_) {
     if (calvin_ready_txns_.Pop(&txn)) {
       // Execute txn.
+      // printf("Starting to execute txn %d\n", txn->unique_id_);
       ExecuteTxn(txn);
 
       // Commit/abort txn according to program logic's commit/abort decision.
@@ -263,23 +305,35 @@ void TxnProcessor::CalvinContIndivExecutorFunc() {
       }
 
       // Update indegrees of neighbors
+      // if (txn->neighbors_mutex.try_lock()) {
       txn->neighbors_mutex.lock();
       std::vector<Txn *> sorted_neighbors(txn->neighbors.begin(),
                                           txn->neighbors.end());
-      txn->neighbors_mutex.unlock();
-      std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
+      // std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
 
       for (Txn *nei : sorted_neighbors) {
-        nei->indegree_mutex.lock();
-        nei->indegree--;
-        if (nei->indegree == 0) {
-          calvin_ready_txns_.Push(nei);
-        }
-        nei->indegree_mutex.unlock();
+        // print this neighbor
+        // printf("Neighbor indegree: %d\n", nei->indegree);
+          // test with trylock here
+          nei->indegree_mutex.lock();
+          // printf("Txn %d got mutex for neighbor %d\n", txn->unique_id_,
+                //  nei->unique_id_);
+          nei->indegree--;
+          if (nei->indegree == 0) {
+            calvin_ready_txns_.Push(nei);
+          }
+          nei->indegree_mutex.unlock();
+        // nei->neighbors_mutex.unlock();
       }
+      // } else {
+      //   printf("Failed to get mutex 1\n");
+      // }
 
       // Return result to client.
+      // printf("Pushing txn %d to txn_results\n", txn->unique_id_);
       txn_results_.Push(txn);
+      // printf("Unlocking mutex!\n");
+      txn->neighbors_mutex.unlock();
     }
   }
 }
@@ -329,7 +383,8 @@ void TxnProcessor::RunCalvinEpochScheduler() {
                  reinterpret_cast<void *>(this));
   //   Start Calvin Epoch Executor
   // pthread_create(&calvin_epoch_executor_thread, NULL,
-  //                calvin_epoch_executor_helper, reinterpret_cast<void *>(this));
+  //                calvin_epoch_executor_helper, reinterpret_cast<void
+  //                *>(this));
   // for(int i = 0; i < THREAD_COUNT; i++) {
   //   tp_.AddTask([this]() { this->CalvinEpochExecutorLMAO(); });
   // }
@@ -449,7 +504,7 @@ void TxnProcessor::CalvinEpochExecutor() {
   }
 }
 
-void TxnProcessor::CalvinExecuteSingleEpoch(EpochDag* epoch_dag) {
+void TxnProcessor::CalvinExecuteSingleEpoch(EpochDag *epoch_dag) {
   num_txns_left_in_epoch = 0;
   // if (num_txns_left_in_epoch != 0) {
   //   std::cout << "Num transactions in epoch: " << num_txns_left_in_epoch
