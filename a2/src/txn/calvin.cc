@@ -165,31 +165,10 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
       txn->indegree = 0;
       txn->neighbors.clear();
 
-      for (const Key &key : sorted_keys) {
+      // for (const Key &key : sorted_keys) {
 
-        // Handle readset
-        // if (txn->readset_.count(key)) {
-          if (!shared_holders.contains(key)) {
-            shared_holders[key] = {};
-          }
-          shared_holders[key].insert(txn);
-
-          if (last_excl.contains(key) && last_excl[key] != txn) {
-            last_excl[key]->neighbors_mutex.lock();
-
-            if (last_excl[key]->Status() != COMMITTED &&
-                last_excl[key]->Status() != ABORTED) {
-              // We came in before CalvinExecutorFunc took "snapshot" of
-              // neighbors
-              txn->indegree++;
-              last_excl[key]->neighbors.insert(txn);
-            }
-
-            last_excl[key]->neighbors_mutex.unlock();
-          }
-        // }
         // Handle writeset
-        if (txn->writeset_.count(key)) {
+        for (const Key &key : txn->writeset_) {
           if (shared_holders.contains(key)) {
             for (auto conflicting_txn : shared_holders[key]) {
               if (conflicting_txn != txn) {
@@ -226,8 +205,30 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
           last_excl[key] = txn;
         }
 
+        // Handle readset
+        for (const Key &key : txn->readset_) {
+          if (!shared_holders.contains(key)) {
+            shared_holders[key] = {};
+          }
+          shared_holders[key].insert(txn);
 
-      }
+          if (last_excl.contains(key) && last_excl[key] != txn) {
+            last_excl[key]->neighbors_mutex.lock();
+
+            if (last_excl[key]->Status() != COMMITTED &&
+                last_excl[key]->Status() != ABORTED) {
+              // We came in before CalvinExecutorFunc took "snapshot" of
+              // neighbors
+              txn->indegree++;
+              last_excl[key]->neighbors.insert(txn);
+            }
+
+            last_excl[key]->neighbors_mutex.unlock();
+          }
+        }
+
+
+      // }
 
       // If current transaction's indegree is 0, add it to the threadpool
       if (txn->indegree == 0) {
