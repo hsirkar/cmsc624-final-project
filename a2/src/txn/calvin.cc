@@ -63,9 +63,9 @@ void TxnProcessor::RunCalvinContScheduler() {
       }
 
       // Loop through readset
-      auto merged_sets = txn->readset_;
-      merged_sets.insert(txn->writeset_.begin(), txn->writeset_.end());
-      for (const Key &key : merged_sets) {
+      // auto merged_sets = txn->readset_;
+      // merged_sets.insert(txn->writeset_.begin(), txn->writeset_.end());
+      for (const Key &key : txn->readset_) {
         // Add to shared holders
         if (!shared_holders.contains(key)) {
           shared_holders[key] = {};
