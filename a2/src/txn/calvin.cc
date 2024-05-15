@@ -18,12 +18,11 @@ void TxnProcessor::RunCalvinContScheduler() {
 
   while (!stopped_) {
     if (txn_requests_.Pop(&txn)) {
-      adj_list_lock.lock();
-      adj_list[txn] = {};
-      adj_list_lock.unlock();
 
       adj_list_lock.lock();
       indegree_lock.lock();
+
+      adj_list[txn] = {};
 
       // Print the adj_list in one go so the lines aren't interleaved
 
@@ -32,7 +31,9 @@ void TxnProcessor::RunCalvinContScheduler() {
       int ind = 0;
 
       // Loop through readset
-      for (const Key &key : txn->readset_) {
+      auto merged_sets = txn->readset_;
+      merged_sets.insert(txn->writeset_.begin(), txn->writeset_.end());
+      for (const Key &key : merged_sets) {
         // Add to shared holders
         if (!shared_holders.contains(key)) {
           shared_holders[key] = {};
