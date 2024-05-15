@@ -30,25 +30,6 @@ void TxnProcessor::RunCalvinContScheduler() {
       // we want to add it to the threadpool right away
       int ind = 0;
 
-      // Loop through readset
-      auto merged_sets = txn->readset_;
-      merged_sets.insert(txn->writeset_.begin(), txn->writeset_.end());
-      for (const Key &key : merged_sets) {
-        // Add to shared holders
-        if (!shared_holders.contains(key)) {
-          shared_holders[key] = {};
-        }
-        shared_holders[key].insert(txn);
-
-        // If the last_excl txn is not the current txn, add an edge
-        if (last_excl.contains(key) && last_excl[key] != txn &&
-            last_excl[key]->Status() == INCOMPLETE &&
-            !adj_list[last_excl[key]].contains(txn)) {
-          adj_list[last_excl[key]].insert(txn);
-          ind++;
-        }
-      }
-
       // Loop through writeset
       for (const Key &key : txn->writeset_) {
         // Add an edge between the current txn and all shared holders
@@ -65,6 +46,25 @@ void TxnProcessor::RunCalvinContScheduler() {
         }
 
         last_excl[key] = txn;
+      }
+
+      // Loop through readset
+      auto merged_sets = txn->readset_;
+      merged_sets.insert(txn->writeset_.begin(), txn->writeset_.end());
+      for (const Key &key : txn->readset_) {
+        // Add to shared holders
+        if (!shared_holders.contains(key)) {
+          shared_holders[key] = {};
+        }
+        shared_holders[key].insert(txn);
+
+        // If the last_excl txn is not the current txn, add an edge
+        if (last_excl.contains(key) && last_excl[key] != txn &&
+            last_excl[key]->Status() == INCOMPLETE &&
+            !adj_list[last_excl[key]].contains(txn)) {
+          adj_list[last_excl[key]].insert(txn);
+          ind++;
+        }
       }
 
       // If current transaction's indegree is 0, add it to the threadpool
