@@ -1,0 +1,10 @@
+build
+.deps
+bin
+obj
+
+.vscode
+.DS_Store
+.cache/clangd/index
+compile_commands.json
+work_steal
