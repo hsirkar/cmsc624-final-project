@@ -206,7 +206,9 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
         }
 
         // Handle readset
-        for (const Key &key : txn->readset_) {
+      auto merged_sets = txn->readset_;
+      merged_sets.insert(txn->writeset_.begin(), txn->writeset_.end());
+        for (const Key &key : merged_sets) {
           if (!shared_holders.contains(key)) {
             shared_holders[key] = {};
           }
