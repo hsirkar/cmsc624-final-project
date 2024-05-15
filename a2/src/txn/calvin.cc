@@ -153,33 +153,8 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
   std::unordered_map<Key, std::unordered_set<Txn *>> shared_holders;
   std::unordered_map<Key, Txn *> last_excl;
 
-  // std::cout << "\nstd::vector<Txn> txns{";
-
   while (!stopped_) {
     while (txn_requests_.Pop(&txn)) {
-      // // Print read and write sets of transaction
-      // std::cout << "{\"" << txn->unique_id_ << "\", {";
-
-      // // readset
-      // for (auto it = txn->readset_.begin(); it != txn->readset_.end(); ++it)
-      // {
-      //   std::cout << "\"" << *it << "\"";
-      //   if (std::next(it) != txn->readset_.end()) {
-      //     std::cout << ", ";
-      //   }
-      // }
-      // std::cout << "}, {";
-
-      // // writeset
-      // for (auto it = txn->writeset_.begin(); it != txn->writeset_.end();
-      // ++it) {
-      //   std::cout << "\"" << *it << "\"";
-      //   if (std::next(it) != txn->writeset_.end()) {
-      //     std::cout << ", ";
-      //   }
-      // }
-      // std::cout << "}}, \n";
-
       std::vector<Key> sorted_keys;
       sorted_keys.reserve(txn->readset_.size() + txn->writeset_.size());
       sorted_keys.insert(sorted_keys.end(), txn->readset_.begin(),
@@ -191,8 +166,6 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
       txn->indegree_mutex.lock();
       txn->indegree = 0;
       txn->neighbors.clear();
-
-      // for (const Key &key : sorted_keys) {
 
       // Handle writeset
       for (const Key &key : txn->writeset_) {
@@ -237,16 +210,12 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
 
         last_excl[key] = txn;
       }
-      // we never use this
-      // printf("Length of conflicting txns: %d\n", conflicting_txns);
 
       // Handle readset
       for (const Key &key : txn->readset_) {
         if (!shared_holders.contains(key)) {
           shared_holders[key] = {};
         }
-        // printf("Adding txn %d to shared holders for key %d\n",
-        // txn->unique_id_, key);
         shared_holders[key].insert(txn);
 
         if (last_excl.contains(key) && last_excl[key] != txn) {
@@ -266,18 +235,11 @@ void TxnProcessor::RunCalvinContIndivScheduler() {
         }
       }
 
-      // }
-
-      // Print using C-style
-      // printf("Scheduler indegree for transaction %d: %d\n", txn->unique_id_,
-      // txn->indegree);
-
       // If current transaction's indegree is 0, add it to the threadpool
       if (txn->indegree == 0) {
         calvin_ready_txns_.Push(txn);
       }
       txn->indegree_mutex.unlock();
-      // printf("Cleared indegree mutex for txn %d\n", txn->unique_id_);
     }
   }
 }
@@ -312,27 +274,17 @@ void TxnProcessor::CalvinContIndivExecutorFunc() {
       // std::sort(sorted_neighbors.begin(), sorted_neighbors.end());
 
       for (Txn *nei : sorted_neighbors) {
-        // print this neighbor
-        // printf("Neighbor indegree: %d\n", nei->indegree);
           // test with trylock here
           nei->indegree_mutex.lock();
-          // printf("Txn %d got mutex for neighbor %d\n", txn->unique_id_,
-                //  nei->unique_id_);
           nei->indegree--;
           if (nei->indegree == 0) {
             calvin_ready_txns_.Push(nei);
           }
           nei->indegree_mutex.unlock();
-        // nei->neighbors_mutex.unlock();
       }
-      // } else {
-      //   printf("Failed to get mutex 1\n");
-      // }
 
       // Return result to client.
-      // printf("Pushing txn %d to txn_results\n", txn->unique_id_);
       txn_results_.Push(txn);
-      // printf("Unlocking mutex!\n");
       txn->neighbors_mutex.unlock();
     }
   }
