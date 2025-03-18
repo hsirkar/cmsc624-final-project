@@ -5,7 +5,7 @@ This repository contains the source code for **"From DAGs to Riches: Improving T
 DAGER is a novel algorithm designed to enhance transaction throughput in deterministic database systems. It utilizes directed acyclic graphs (DAGs) for efficient transaction scheduling to improve transaction throughput. We implement DAGER within an in-memory key-value database (somewhat based on Assignment 2), simulating transactions under varying contention levels.
 
 ### Project Resources
-- [Final Report](https://github.com/hsirkar/pdfs/blob/main/CMSC701_Final_Report.pdf?raw=true)  
+- [Final Report](https://github.com/hsirkar/pdfs/blob/main/CMSC624_Final_Paper.pdf?raw=true)  
 - [Presentation](https://github.com/hsirkar/pdfs/blob/main/624%20Final%20Project%20Presentation.pdf?raw=true)  
 
 ### Project Structure  
